@@ -69,52 +69,6 @@ def _combine_views(front: LayeredShapes, side_x: LayeredShapes, side_y: LayeredS
     )
 
 
-def fit_layered_to_frame(
-    layered: LayeredShapes,
-    frame_bbox_mm: BoundingBox2D,
-    paper_size_mm: Point2D | None,
-    frame_margin_ratio: float = 1.0,
-    scale: float | None = None,
-) -> LayeredShapes:
-    bounds = _layered_bounds(layered)
-    if bounds is None:
-        return layered
-
-    frame_min_x, frame_min_y, frame_max_x, frame_max_y = frame_bbox_mm
-    frame_width = frame_max_x - frame_min_x
-    frame_height = frame_max_y - frame_min_y
-    if frame_width <= 0 or frame_height <= 0:
-        return layered
-
-    size = bounds.size
-    if size.X <= 0 or size.Y <= 0:
-        return layered
-
-    fit_scale = min(frame_width / size.X, frame_height / size.Y) * frame_margin_ratio
-    if scale:
-        fit_scale *= scale
-
-    center = bounds.center()
-    layered = _transform_layered(layered, translate=(-center.X, -center.Y, -center.Z))
-    if fit_scale != 1.0:
-        layered = _transform_layered(layered, scale=fit_scale)
-
-    frame_center_x = (frame_min_x + frame_max_x) / 2
-    frame_center_y = (frame_min_y + frame_max_y) / 2
-    if paper_size_mm:
-        target_center = (
-            frame_center_x - paper_size_mm[0] / 2,
-            frame_center_y - paper_size_mm[1] / 2,
-            0.0,
-        )
-    else:
-        target_center = (0.0, 0.0, 0.0)
-
-    if target_center != (0.0, 0.0, 0.0):
-        layered = _transform_layered(layered, translate=target_center)
-    return layered
-
-
 def fit_three_view_layout(
     layout: ThreeViewLayout,
     frame_bbox_mm: BoundingBox2D,

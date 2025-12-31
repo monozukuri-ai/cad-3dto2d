@@ -21,19 +21,16 @@ class DimensionSettings(BaseModel):
     diameter_symbol: str = "D"
     pitch_prefix: str = "P"
 
-
-def _default_settings(size_x: float, size_y: float) -> DimensionSettings:
-    size_ref = max(size_x, size_y, 1.0)
-    return DimensionSettings(
-        offset=max(5.0, size_ref * 0.1),
-        extension_gap=max(0.5, size_ref * 0.02),
-        arrow_size=max(2.0, size_ref * 0.03),
-        text_height=max(2.5, size_ref * 0.04),
-        text_gap=max(1.0, size_ref * 0.02),
-        decimal_places=1,
-        diameter_symbol="D",
-        pitch_prefix="P",
-    )
+    @classmethod
+    def default(cls, size_x: float, size_y: float) -> DimensionSettings:
+        size_ref = max(size_x, size_y, 1.0)
+        return cls(
+            offset=max(5.0, size_ref * 0.1),
+            extension_gap=max(0.5, size_ref * 0.02),
+            arrow_size=max(2.0, size_ref * 0.03),
+            text_height=max(2.5, size_ref * 0.04),
+            text_gap=max(1.0, size_ref * 0.02),
+        )
 
 
 def _maybe_line(p1: Point3D, p2: Point3D) -> Line | None:
@@ -46,7 +43,7 @@ def _maybe_line(p1: Point3D, p2: Point3D) -> Line | None:
 
 
 def default_settings_from_size(size_x: float, size_y: float) -> DimensionSettings:
-    return _default_settings(size_x, size_y)
+    return DimensionSettings.default(size_x, size_y)
 
 
 class DimensionText(BaseModel):
@@ -124,7 +121,7 @@ def generate_diameter_dimension(
     leader_length: float | None = None,
     label: str | None = None,
 ) -> DimensionResult:
-    settings = settings or _default_settings(radius * 2, radius * 2)
+    settings = settings or DimensionSettings.default(radius * 2, radius * 2)
     angle_rad = math.radians(leader_angle_deg)
     dir_x = math.cos(angle_rad)
     dir_y = math.sin(angle_rad)
@@ -227,7 +224,7 @@ def generate_linear_dimension(
     settings: DimensionSettings | None = None,
     label: str | None = None,
 ) -> DimensionResult:
-    settings = settings or _default_settings(abs(p2[0] - p1[0]), abs(p2[1] - p1[1]))
+    settings = settings or DimensionSettings.default(abs(p2[0] - p1[0]), abs(p2[1] - p1[1]))
     dx = abs(p2[0] - p1[0])
     dy = abs(p2[1] - p1[1])
     if orientation is None:
@@ -282,7 +279,7 @@ def generate_basic_dimensions(
         return DimensionResult(lines=[], texts=[])
     bounds = Compound(children=shapes).bounding_box()
     size = bounds.size
-    settings = settings or _default_settings(size.X, size.Y)
+    settings = settings or DimensionSettings.default(size.X, size.Y)
     xmin, ymin = bounds.min.X, bounds.min.Y
     xmax, ymax = bounds.max.X, bounds.max.Y
     horizontal_side: DimensionSide = "top" if horizontal_dir >= 0 else "bottom"

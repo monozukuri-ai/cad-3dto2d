@@ -35,6 +35,7 @@ from .types import BoundingBox2D, Point2D, Shape
 from .views import project_three_views
 
 RASTER_IMAGE_TYPES = {"png", "jpg", "jpeg"}
+_TEXT_WIDTH_FACTOR = 0.6
 
 
 class ViewDimensionConfig(BaseModel):
@@ -65,24 +66,25 @@ def _load_template(template_spec: TemplateSpec) -> ShapeList[Shape]:
     return import_svg(template_spec.file_path)
 
 
-def _normalize_outputs(output_file: str, output_files: Iterable[str] | None) -> list[str]:
-    outputs = [output_file]
-    if output_files:
-        outputs.extend(output_files)
-    seen: set[str] = set()
-    unique: list[str] = []
-    for path in outputs:
-        if path in seen:
-            continue
-        seen.add(path)
-        unique.append(path)
-    return unique
-
-
 def _centered_frame_bounds(template_spec: TemplateSpec | None) -> BoundingBox2D | None:
     if not template_spec or not template_spec.frame_bbox_mm:
         return None
     min_x, min_y, max_x, max_y = template_spec.frame_bbox_mm
+    if template_spec.paper_size_mm:
+        paper_w, paper_h = template_spec.paper_size_mm
+        return (
+            min_x - paper_w / 2,
+            min_y - paper_h / 2,
+            max_x - paper_w / 2,
+            max_y - paper_h / 2,
+        )
+    return (min_x, min_y, max_x, max_y)
+
+
+def _centered_title_block_bounds(template_spec: TemplateSpec | None) -> BoundingBox2D | None:
+    if not template_spec or not template_spec.title_block_bbox_mm:
+        return None
+    min_x, min_y, max_x, max_y = template_spec.title_block_bbox_mm
     if template_spec.paper_size_mm:
         paper_w, paper_h = template_spec.paper_size_mm
         return (
@@ -131,6 +133,130 @@ def _max_length_to_frame(
     if not candidates:
         return 0.0
     return max(0.0, min(candidates))
+
+
+def _estimate_text_width(text: str, height: float, width_factor: float = _TEXT_WIDTH_FACTOR) -> float:
+    if not text:
+        return 0.0
+    return max(height * 0.4, len(text) * height * width_factor)
+
+
+def _text_bounds(text: DimensionText, width_factor: float = _TEXT_WIDTH_FACTOR) -> BoundingBox2D:
+    width = _estimate_text_width(text.text, text.height, width_factor=width_factor)
+    if text.anchor == "start":
+        min_x = text.x
+        max_x = text.x + width
+    elif text.anchor == "end":
+        min_x = text.x - width
+        max_x = text.x
+    else:
+        half = width / 2
+        min_x = text.x - half
+        max_x = text.x + half
+    half_h = text.height / 2
+    min_y = text.y - half_h
+    max_y = text.y + half_h
+    return (min_x, min_y, max_x, max_y)
+
+
+def _bbox_intersects(a: BoundingBox2D, b: BoundingBox2D) -> bool:
+    return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
+
+
+def _bbox_within_frame(bbox: BoundingBox2D, frame_bounds: BoundingBox2D, padding: float) -> bool:
+    frame_min_x, frame_min_y, frame_max_x, frame_max_y = frame_bounds
+    return (
+        bbox[0] >= frame_min_x + padding
+        and bbox[2] <= frame_max_x - padding
+        and bbox[1] >= frame_min_y + padding
+        and bbox[3] <= frame_max_y - padding
+    )
+
+
+def _shift_text_out_of_block(
+    text: DimensionText,
+    block_bounds: BoundingBox2D,
+    frame_bounds: BoundingBox2D,
+    padding: float,
+    width_factor: float = _TEXT_WIDTH_FACTOR,
+) -> DimensionText:
+    text_bbox = _text_bounds(text, width_factor=width_factor)
+    if not _bbox_intersects(text_bbox, block_bounds):
+        return text
+
+    block_min_x, block_min_y, block_max_x, block_max_y = block_bounds
+    text_min_x, text_min_y, text_max_x, text_max_y = text_bbox
+
+    candidates: list[tuple[float, float]] = [
+        (block_min_x - padding - text_max_x, 0.0),
+        (block_max_x + padding - text_min_x, 0.0),
+        (0.0, block_min_y - padding - text_max_y),
+        (0.0, block_max_y + padding - text_min_y),
+    ]
+    best: tuple[float, float] | None = None
+    best_score = float("inf")
+    for dx, dy in candidates:
+        if dx == 0.0 and dy == 0.0:
+            continue
+        shifted = text.model_copy(update={"x": text.x + dx, "y": text.y + dy})
+        shifted_bbox = _text_bounds(shifted, width_factor=width_factor)
+        if not _bbox_within_frame(shifted_bbox, frame_bounds, padding=padding):
+            continue
+        score = abs(dx) + abs(dy)
+        if score < best_score:
+            best_score = score
+            best = (dx, dy)
+
+    if best is None:
+        return text
+    return text.model_copy(update={"x": text.x + best[0], "y": text.y + best[1]})
+
+
+def _clamp_text_to_frame(
+    text: DimensionText,
+    frame_bounds: BoundingBox2D,
+    padding: float = 0.0,
+    width_factor: float = _TEXT_WIDTH_FACTOR,
+) -> DimensionText:
+    frame_min_x, frame_min_y, frame_max_x, frame_max_y = frame_bounds
+    min_x, min_y, max_x, max_y = _text_bounds(text, width_factor=width_factor)
+    new_x = text.x
+    new_y = text.y
+
+    min_x_limit = frame_min_x + padding
+    max_x_limit = frame_max_x - padding
+    min_y_limit = frame_min_y + padding
+    max_y_limit = frame_max_y - padding
+
+    if min_x < min_x_limit:
+        new_x += min_x_limit - min_x
+    elif max_x > max_x_limit:
+        new_x -= max_x - max_x_limit
+
+    if min_y < min_y_limit:
+        new_y += min_y_limit - min_y
+    elif max_y > max_y_limit:
+        new_y -= max_y - max_y_limit
+
+    if new_x == text.x and new_y == text.y:
+        return text
+    return text.model_copy(update={"x": new_x, "y": new_y})
+
+
+def _clamp_texts_to_frame(
+    texts: list[DimensionText],
+    frame_bounds: BoundingBox2D,
+    padding: float,
+    avoid_bounds: list[BoundingBox2D] | None = None,
+) -> list[DimensionText]:
+    adjusted: list[DimensionText] = []
+    for text in texts:
+        current = _clamp_text_to_frame(text, frame_bounds, padding=padding)
+        if avoid_bounds:
+            for block in avoid_bounds:
+                current = _shift_text_out_of_block(current, block, frame_bounds, padding=padding)
+        adjusted.append(current)
+    return adjusted
 
 
 def _resolve_dimension_settings(
@@ -248,41 +374,133 @@ def _plan_feature_dimensions(
     return line_dims, diameter_dims, pitch_axes
 
 
+def _dimension_text_for_plan(
+    plan: PlannedDimension,
+    side: DimensionSide,
+    offset: float,
+    label: str,
+    settings: DimensionSettings,
+) -> DimensionText:
+    if plan.orientation == "horizontal":
+        sign = 1 if side == "top" else -1
+        dim_y = (max(plan.p1[1], plan.p2[1]) if side == "top" else min(plan.p1[1], plan.p2[1])) + sign * offset
+        return DimensionText(
+            x=(plan.p1[0] + plan.p2[0]) / 2,
+            y=dim_y + sign * settings.text_gap,
+            text=label,
+            height=settings.text_height,
+            anchor="middle",
+        )
+    sign = 1 if side == "right" else -1
+    dim_x = (max(plan.p1[0], plan.p2[0]) if side == "right" else min(plan.p1[0], plan.p2[0])) + sign * offset
+    return DimensionText(
+        x=dim_x + sign * settings.text_gap,
+        y=(plan.p1[1] + plan.p2[1]) / 2,
+        text=label,
+        height=settings.text_height,
+        anchor="start" if side == "right" else "end",
+    )
+
+
+def _text_fits_bounds(
+    text: DimensionText,
+    frame_bounds: BoundingBox2D,
+    padding: float,
+    avoid_bounds: list[BoundingBox2D] | None = None,
+) -> bool:
+    bbox = _text_bounds(text)
+    if not _bbox_within_frame(bbox, frame_bounds, padding=padding):
+        return False
+    if avoid_bounds:
+        for block in avoid_bounds:
+            if _bbox_intersects(bbox, block):
+                return False
+    return True
+
+
 def _generate_line_dimensions(
     line_dims: list[PlannedDimension],
     settings: DimensionSettings,
     frame_bounds: BoundingBox2D | None,
+    avoid_bounds: list[BoundingBox2D] | None = None,
 ) -> DimensionOutput:
     """Generate dimension lines from planned dimensions with frame clamping."""
     lines: list[Shape] = []
     texts: list[DimensionText] = []
-    padding = settings.text_gap + settings.text_height
     lane_step = settings.text_height + settings.text_gap + settings.arrow_size
     lane_index = {"top": 0, "bottom": 0, "left": 0, "right": 0}
     base_offset = settings.offset + lane_step
 
     for plan in line_dims:
-        offset = base_offset + lane_index[plan.side] * lane_step
-        lane_index[plan.side] += 1
+        if plan.label:
+            label = plan.label
+        elif plan.orientation == "horizontal":
+            label = format_length(abs(plan.p2[0] - plan.p1[0]), settings.decimal_places)
+        else:
+            label = format_length(abs(plan.p2[1] - plan.p1[1]), settings.decimal_places)
 
+        text_width = _estimate_text_width(label, settings.text_height)
+        padding = settings.text_gap + settings.text_height * 0.5
+
+        def resolve_offset(side: DimensionSide) -> float:
+            offset_value = base_offset + lane_index[side] * lane_step
+            if frame_bounds:
+                frame_min_x, frame_min_y, frame_max_x, frame_max_y = frame_bounds
+                if plan.orientation == "horizontal":
+                    base = max(plan.p1[1], plan.p2[1]) if side == "top" else min(plan.p1[1], plan.p2[1])
+                    direction = 1 if side == "top" else -1
+                    return abs(
+                        _clamp_offset(
+                            base,
+                            direction,
+                            frame_min_y,
+                            frame_max_y,
+                            offset_value,
+                            padding=settings.text_gap + settings.text_height,
+                        )
+                    )
+                base = max(plan.p1[0], plan.p2[0]) if side == "right" else min(plan.p1[0], plan.p2[0])
+                direction = 1 if side == "right" else -1
+                return abs(
+                    _clamp_offset(
+                        base,
+                        direction,
+                        frame_min_x,
+                        frame_max_x,
+                        offset_value,
+                        padding=settings.text_gap + text_width,
+                    )
+                )
+            return offset_value
+
+        candidate_sides = [plan.side]
         if frame_bounds:
-            frame_min_x, frame_min_y, frame_max_x, frame_max_y = frame_bounds
-            if plan.orientation == "horizontal":
-                base = max(plan.p1[1], plan.p2[1]) if plan.side == "top" else min(plan.p1[1], plan.p2[1])
-                direction = 1 if plan.side == "top" else -1
-                offset = abs(_clamp_offset(base, direction, frame_min_y, frame_max_y, offset, padding=padding))
-            else:
-                base = max(plan.p1[0], plan.p2[0]) if plan.side == "right" else min(plan.p1[0], plan.p2[0])
-                direction = 1 if plan.side == "right" else -1
-                offset = abs(_clamp_offset(base, direction, frame_min_x, frame_max_x, offset, padding=padding))
+            flipped = "bottom" if plan.side == "top" else "top" if plan.side in ("top", "bottom") else (
+                "left" if plan.side == "right" else "right"
+            )
+            if flipped not in candidate_sides:
+                candidate_sides.append(flipped)
+
+        selected_side = plan.side
+        selected_offset = resolve_offset(plan.side)
+        if frame_bounds:
+            for side in candidate_sides:
+                offset = resolve_offset(side)
+                text = _dimension_text_for_plan(plan, side, offset, label, settings)
+                if _text_fits_bounds(text, frame_bounds, padding=padding, avoid_bounds=avoid_bounds):
+                    selected_side = side
+                    selected_offset = offset
+                    break
+
+        lane_index[selected_side] += 1
 
         result = generate_linear_dimension(
             plan.p1, plan.p2,
             orientation=plan.orientation,
-            side=plan.side,
-            offset=offset,
+            side=selected_side,
+            offset=selected_offset,
             settings=settings,
-            label=plan.label,
+            label=label,
         )
         lines.extend(result.lines)
         texts.extend(result.texts)
@@ -301,6 +519,9 @@ def _generate_diameter_dimensions(
     padding = settings.text_gap + settings.text_height
 
     for plan in diameter_dims:
+        label = plan.label
+        if label is None:
+            label = f"{settings.diameter_symbol}{format_length(plan.radius * 2, settings.decimal_places)}"
         leader_length = settings.arrow_size * 4 + settings.text_gap * 2 + settings.text_height
 
         if frame_bounds:
@@ -321,6 +542,7 @@ def _generate_diameter_dimensions(
             leader_angle_deg=plan.leader_angle_deg,
             settings=settings,
             leader_length=leader_length,
+            label=label,
         )
         lines.extend(result.lines)
         texts.extend(result.texts)
@@ -334,6 +556,7 @@ def _generate_view_dimensions(
     dimension_settings: DimensionSettings | None,
     dimension_overrides: dict[str, object] | None,
     frame_bounds: BoundingBox2D | None,
+    avoid_bounds: list[BoundingBox2D] | None = None,
 ) -> DimensionOutput:
     """Generate all dimensions for a single view."""
     shapes = view.visible + view.hidden
@@ -352,12 +575,19 @@ def _generate_view_dimensions(
     line_dims, diameter_dims, _ = _plan_feature_dimensions(features, config, settings, rules)
 
     # Generate planned dimensions
-    line_output = _generate_line_dimensions(line_dims, settings, frame_bounds)
+    line_output = _generate_line_dimensions(line_dims, settings, frame_bounds, avoid_bounds=avoid_bounds)
     diameter_output = _generate_diameter_dimensions(diameter_dims, settings, frame_bounds)
 
     # Combine all outputs
     all_lines = list(basic_result.lines) + line_output.lines + diameter_output.lines
     all_texts = list(basic_result.texts) + line_output.texts + diameter_output.texts
+    if frame_bounds:
+        all_texts = _clamp_texts_to_frame(
+            all_texts,
+            frame_bounds,
+            padding=settings.text_gap + settings.text_height * 0.5,
+            avoid_bounds=avoid_bounds,
+        )
 
     return DimensionOutput(all_lines, all_texts)
 
@@ -399,12 +629,14 @@ def _build_layers(
     # Generate dimensions for each view
     if add_dimensions:
         frame_bounds = _centered_frame_bounds(template_spec)
+        title_block_bounds = _centered_title_block_bounds(template_spec)
+        avoid_bounds = [title_block_bounds] if title_block_bounds else None
         dims: list[Shape] = []
 
         layout_views = [layout.front, layout.side_x, layout.side_y]
         for view, config in zip(layout_views, VIEW_CONFIGS):
             output = _generate_view_dimensions(
-                view, config, dimension_settings, dimension_overrides, frame_bounds,
+                view, config, dimension_settings, dimension_overrides, frame_bounds, avoid_bounds=avoid_bounds,
             )
             dims.extend(output.lines)
             dim_texts.extend(output.texts)
@@ -453,7 +685,7 @@ def _export_layers(
 
 def convert_2d_drawing(
     step_file: str,
-    output_file: str,
+    output_files: Iterable[str],
     line_weight: float = 0.5,
     add_template: bool = True,
     template_name: str = "A4_LandscapeTD",
@@ -462,7 +694,6 @@ def convert_2d_drawing(
     style_name: str | None = "iso",
     add_dimensions: bool = False,
     dimension_settings: DimensionSettings | None = None,
-    output_files: Iterable[str] | None = None,
 ) -> None:
     model = import_step(step_file)
     style = load_style(style_name) if style_name else None
@@ -479,5 +710,5 @@ def convert_2d_drawing(
         dimension_settings,
         dimension_overrides,
     )
-    for target in _normalize_outputs(output_file, output_files):
+    for target in output_files:
         _export_layers(layers, target, line_weight, line_types=line_types, text_annotations=text_annotations)

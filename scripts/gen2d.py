@@ -27,19 +27,16 @@ def main():
         parser.error(f"Unsupported format(s): {', '.join(invalid)}")
 
     base, _ = os.path.splitext(args.step_file)
-    outputs = [f"{base}.{fmt}" for fmt in formats]
-    output_file = outputs[0]
-    output_files = outputs[1:]
+    outputs = set([f"{base}.{fmt}" for fmt in formats])
     convert_2d_drawing(
         args.step_file,
-        output_file,
+        outputs,
         add_template=True,
         template_name=args.template,
         style_name=args.style,
         x_offset=args.x_offset,
         y_offset=args.y_offset,
         add_dimensions=args.add_dimensions,
-        output_files=output_files,
     )
 
 

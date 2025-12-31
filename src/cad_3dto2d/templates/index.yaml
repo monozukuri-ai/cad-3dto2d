@@ -2,4 +2,5 @@ A4_LandscapeTD:
   file: A4_LandscapeTD.svg
   paper_size_mm: [297, 210]
   frame_bbox_mm: [10, 10, 287, 200]
+  title_block_bbox_mm: [147, 153, 287, 200]
   default_scale: 1.0

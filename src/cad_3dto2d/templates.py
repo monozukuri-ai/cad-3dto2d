@@ -18,6 +18,7 @@ class TemplateSpec(BaseModel):
     file_path: str
     paper_size_mm: Point2D | None = None
     frame_bbox_mm: BoundingBox2D | None = None
+    title_block_bbox_mm: BoundingBox2D | None = None
     default_scale: float = 1.0
 
 
