@@ -3,6 +3,7 @@ from __future__ import annotations
 from build123d import ExportDXF, LineType, Unit
 import ezdxf
 from ezdxf.addons.drawing import Frontend, RenderContext, layout
+from ezdxf.addons.drawing.config import BackgroundPolicy, Configuration
 from ezdxf.addons.drawing.svg import SVGBackend
 
 from ..annotations.dimensions import DiameterDimensionSpec, DimensionSettings, LinearDimensionSpec
@@ -98,11 +99,12 @@ def render_dxf_to_svg(
 ) -> str:
     ctx = RenderContext(doc)
     backend = SVGBackend()
+    config = Configuration(background_policy=BackgroundPolicy.WHITE)
     page = layout.Page(
         page_size_mm[0],
         page_size_mm[1],
         layout.Units.mm,
         margins=layout.Margins.all(margin_mm),
     )
-    Frontend(ctx, backend).draw_layout(doc.modelspace(), finalize=True)
+    Frontend(ctx, backend, config=config).draw_layout(doc.modelspace(), finalize=True)
     return backend.get_string(page)
