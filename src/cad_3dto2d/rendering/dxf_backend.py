@@ -5,9 +5,10 @@ import ezdxf
 from ezdxf.addons.drawing import Frontend, RenderContext, layout
 from ezdxf.addons.drawing.config import BackgroundPolicy, Configuration
 from ezdxf.addons.drawing.svg import SVGBackend
+from ezdxf.enums import TextEntityAlignment
 
 from ..annotations.dimensions import DiameterDimensionSpec, DimensionSettings, LinearDimensionSpec
-from ..templates import ParametricTemplateSpec, TemplateSpec
+from ..templates import ParametricTemplateSpec, TemplateSpec, TitleBlockCellSpec, TitleBlockSpec
 from ..types import BoundingBox2D, Shape
 
 _LINE_TYPES: dict[str, LineType] = {
@@ -16,6 +17,7 @@ _LINE_TYPES: dict[str, LineType] = {
     "template": LineType.CONTINUOUS,
     "title": LineType.CONTINUOUS,
 }
+_TITLE_TEXT_HEIGHT_DEFAULT = 3.5
 
 
 def export_dxf_layers(
@@ -41,11 +43,18 @@ def export_dxf_layers(
 def apply_template_to_doc(
     doc: "ezdxf.document.Drawing",
     template_spec: TemplateSpec,
+    title_values: dict[str, str] | None = None,
     x_offset: float = 0.0,
     y_offset: float = 0.0,
 ) -> None:
     if isinstance(template_spec, ParametricTemplateSpec):
-        _apply_parametric_template(doc, template_spec, x_offset=x_offset, y_offset=y_offset)
+        _apply_parametric_template(
+            doc,
+            template_spec,
+            title_values=title_values,
+            x_offset=x_offset,
+            y_offset=y_offset,
+        )
 
 
 def _dimension_overrides(settings: DimensionSettings) -> dict[str, float | int | str]:
@@ -69,6 +78,7 @@ def _dimension_overrides(settings: DimensionSettings) -> dict[str, float | int |
 def _apply_parametric_template(
     doc: "ezdxf.document.Drawing",
     template_spec: ParametricTemplateSpec,
+    title_values: dict[str, str] | None,
     x_offset: float,
     y_offset: float,
 ) -> None:
@@ -84,6 +94,181 @@ def _apply_parametric_template(
         if title_bbox:
             title_bbox = _offset_bbox(title_bbox, x_offset, y_offset)
             _add_bbox_rect(msp, title_bbox, layer="title")
+            if template_spec.title_block:
+                _draw_title_block(
+                    msp,
+                    title_bbox,
+                    template_spec.title_block,
+                    title_values=title_values,
+                    layer="title",
+                )
+
+
+def _draw_title_block(
+    msp,
+    title_bbox: BoundingBox2D,
+    title_spec: TitleBlockSpec,
+    title_values: dict[str, str] | None,
+    layer: str,
+) -> None:
+    if not title_spec.grid:
+        return
+    x_edges, y_edges = _grid_edges(title_bbox, title_spec.grid.rows_mm, title_spec.grid.cols_mm)
+    segments = _grid_segments(x_edges, y_edges)
+    for cell in title_spec.cells:
+        _apply_cell_merge(segments, cell, x_edges, y_edges)
+    _draw_segments(msp, segments, layer=layer)
+    _draw_cell_texts(msp, title_spec, x_edges, y_edges, title_values=title_values, layer=layer)
+
+
+def _grid_edges(
+    title_bbox: BoundingBox2D,
+    rows_mm: list[float],
+    cols_mm: list[float],
+) -> tuple[list[float], list[float]]:
+    min_x, min_y, max_x, max_y = title_bbox
+    x_edges = [min_x]
+    for width in cols_mm:
+        x_edges.append(x_edges[-1] + width)
+    y_edges = [max_y]
+    for height in rows_mm:
+        y_edges.append(y_edges[-1] - height)
+    return x_edges, y_edges
+
+
+def _grid_segments(x_edges: list[float], y_edges: list[float]) -> set[tuple[tuple[float, float], tuple[float, float]]]:
+    segments: set[tuple[tuple[float, float], tuple[float, float]]] = set()
+    for y in y_edges[1:-1]:
+        for i in range(len(x_edges) - 1):
+            segments.add(_normalize_segment((x_edges[i], y), (x_edges[i + 1], y)))
+    for x in x_edges[1:-1]:
+        for j in range(len(y_edges) - 1):
+            segments.add(_normalize_segment((x, y_edges[j]), (x, y_edges[j + 1])))
+    return segments
+
+
+def _apply_cell_merge(
+    segments: set[tuple[tuple[float, float], tuple[float, float]]],
+    cell: TitleBlockCellSpec,
+    x_edges: list[float],
+    y_edges: list[float],
+) -> None:
+    span_rows, span_cols = cell.span
+    if span_rows <= 1 and span_cols <= 1:
+        return
+    row, col = cell.cell
+    for internal_col in range(col + 1, col + span_cols):
+        x = x_edges[internal_col]
+        for r in range(row, row + span_rows):
+            segments.discard(_normalize_segment((x, y_edges[r]), (x, y_edges[r + 1])))
+    for internal_row in range(row + 1, row + span_rows):
+        y = y_edges[internal_row]
+        for c in range(col, col + span_cols):
+            segments.discard(_normalize_segment((x_edges[c], y), (x_edges[c + 1], y)))
+
+
+def _draw_segments(
+    msp,
+    segments: set[tuple[tuple[float, float], tuple[float, float]]],
+    layer: str,
+) -> None:
+    for p1, p2 in segments:
+        msp.add_line(p1, p2, dxfattribs={"layer": layer})
+
+
+def _draw_cell_texts(
+    msp,
+    title_spec: TitleBlockSpec,
+    x_edges: list[float],
+    y_edges: list[float],
+    title_values: dict[str, str] | None,
+    layer: str,
+) -> None:
+    for cell in title_spec.cells:
+        text = _resolve_cell_text(cell, title_values)
+        if not text:
+            continue
+        bounds = _cell_bounds(cell, x_edges, y_edges)
+        anchor = _cell_anchor(bounds, cell.align, cell.valign)
+        anchor = (anchor[0] + cell.offset_mm[0], anchor[1] + cell.offset_mm[1])
+        height = cell.text_height_mm if cell.text_height_mm else _TITLE_TEXT_HEIGHT_DEFAULT
+        alignment = _text_alignment(cell.align, cell.valign)
+        entity = msp.add_text(
+            text,
+            dxfattribs={"height": height, "layer": layer, "rotation": cell.rotate_deg},
+        )
+        entity.set_placement(anchor, align=alignment)
+
+
+def _resolve_cell_text(cell: TitleBlockCellSpec, title_values: dict[str, str] | None) -> str:
+    if cell.text is not None:
+        value = cell.text
+    elif cell.key:
+        value = ""
+        if title_values and cell.key in title_values:
+            value = str(title_values[cell.key])
+        elif cell.default is not None:
+            value = cell.default
+    else:
+        value = ""
+    if not value:
+        return ""
+    return f"{cell.prefix}{value}{cell.suffix}"
+
+
+def _cell_bounds(
+    cell: TitleBlockCellSpec,
+    x_edges: list[float],
+    y_edges: list[float],
+) -> BoundingBox2D:
+    row, col = cell.cell
+    span_rows, span_cols = cell.span
+    left = x_edges[col]
+    right = x_edges[col + span_cols]
+    top = y_edges[row]
+    bottom = y_edges[row + span_rows]
+    return (left, bottom, right, top)
+
+
+def _cell_anchor(bounds: BoundingBox2D, align: str, valign: str) -> tuple[float, float]:
+    min_x, min_y, max_x, max_y = bounds
+    if align == "right":
+        x = max_x
+    elif align == "center":
+        x = (min_x + max_x) / 2
+    else:
+        x = min_x
+    if valign == "top":
+        y = max_y
+    elif valign == "bottom":
+        y = min_y
+    else:
+        y = (min_y + max_y) / 2
+    return x, y
+
+
+def _text_alignment(align: str, valign: str) -> TextEntityAlignment:
+    mapping = {
+        ("left", "top"): TextEntityAlignment.TOP_LEFT,
+        ("center", "top"): TextEntityAlignment.TOP_CENTER,
+        ("right", "top"): TextEntityAlignment.TOP_RIGHT,
+        ("left", "middle"): TextEntityAlignment.MIDDLE_LEFT,
+        ("center", "middle"): TextEntityAlignment.MIDDLE_CENTER,
+        ("right", "middle"): TextEntityAlignment.MIDDLE_RIGHT,
+        ("left", "bottom"): TextEntityAlignment.BOTTOM_LEFT,
+        ("center", "bottom"): TextEntityAlignment.BOTTOM_CENTER,
+        ("right", "bottom"): TextEntityAlignment.BOTTOM_RIGHT,
+    }
+    return mapping.get((align, valign), TextEntityAlignment.MIDDLE_LEFT)
+
+
+def _normalize_segment(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    rp1 = (round(p1[0], 6), round(p1[1], 6))
+    rp2 = (round(p2[0], 6), round(p2[1], 6))
+    return (rp1, rp2) if rp1 <= rp2 else (rp2, rp1)
 
 
 def _centered_bbox(bbox: BoundingBox2D, paper_size_mm: tuple[float, float] | None) -> BoundingBox2D:

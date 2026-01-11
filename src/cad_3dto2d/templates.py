@@ -58,11 +58,92 @@ class FrameSpec(BaseModel):
         return MarginSpec.from_value(value)
 
 
+class TitleBlockGridSpec(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    rows_mm: list[float]
+    cols_mm: list[float]
+
+    @field_validator("rows_mm", "cols_mm")
+    @classmethod
+    def _validate_sizes(cls, value: list[float]) -> list[float]:
+        if not value:
+            raise ValueError("grid rows/cols must not be empty")
+        for entry in value:
+            if entry <= 0:
+                raise ValueError("grid rows/cols must be positive")
+        return value
+
+
+class TitleBlockCellSpec(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: str | None = None
+    cell: tuple[int, int]
+    span: tuple[int, int] = (1, 1)
+    text: str | None = None
+    key: str | None = None
+    default: str | None = None
+    prefix: str = ""
+    suffix: str = ""
+    align: Literal["left", "center", "right"] = "left"
+    valign: Literal["top", "middle", "bottom"] = "middle"
+    text_height_mm: float | None = None
+    offset_mm: Point2D = (0.0, 0.0)
+    rotate_deg: float = 0.0
+
+    @field_validator("cell")
+    @classmethod
+    def _validate_cell(cls, value: tuple[int, int]) -> tuple[int, int]:
+        row, col = value
+        if row < 0 or col < 0:
+            raise ValueError("cell indices must be non-negative")
+        return value
+
+    @field_validator("span")
+    @classmethod
+    def _validate_span(cls, value: tuple[int, int]) -> tuple[int, int]:
+        rows, cols = value
+        if rows <= 0 or cols <= 0:
+            raise ValueError("span values must be positive")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_text(self) -> "TitleBlockCellSpec":
+        if self.text and self.key:
+            raise ValueError("title cell must not define both text and key")
+        return self
+
+
 class TitleBlockSpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     pos: Literal["top_right", "bottom_right", "top_left", "bottom_left"] = "bottom_right"
     size_mm: Point2D
+    grid: TitleBlockGridSpec | None = None
+    cells: list[TitleBlockCellSpec] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_grid_cells(self) -> "TitleBlockSpec":
+        if self.cells and not self.grid:
+            raise ValueError("cells require title_block.grid definition")
+        if not self.grid:
+            return self
+        rows = self.grid.rows_mm
+        cols = self.grid.cols_mm
+        width, height = self.size_mm
+        if sum(cols) > width + 1e-3:
+            raise ValueError("grid column widths exceed title block width")
+        if sum(rows) > height + 1e-3:
+            raise ValueError("grid row heights exceed title block height")
+        max_row = len(rows)
+        max_col = len(cols)
+        for cell in self.cells:
+            row, col = cell.cell
+            span_rows, span_cols = cell.span
+            if row + span_rows > max_row or col + span_cols > max_col:
+                raise ValueError("cell span exceeds grid size")
+        return self
 
 
 class ParametricTemplateSpec(TemplateBaseSpec):
