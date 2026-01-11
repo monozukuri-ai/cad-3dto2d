@@ -16,6 +16,20 @@ def main():
     parser.add_argument("--style", type=str, default="iso")
     parser.add_argument("--x_offset", type=float, default=0.0)
     parser.add_argument("--y_offset", type=float, default=0.0)
+    parser.add_argument(
+        "--side_position",
+        type=str,
+        choices=("left", "right"),
+        default="right",
+        help="Place the side view on the left or right of the front view.",
+    )
+    parser.add_argument(
+        "--top_position",
+        type=str,
+        choices=("up", "down"),
+        default="down",
+        help="Place the top view above or below the front view.",
+    )
     parser.add_argument("--add_dimensions", action="store_true")
     args = parser.parse_args()
     formats = [fmt.strip().lower() for fmt in args.formats.split(",") if fmt.strip()]
@@ -36,6 +50,8 @@ def main():
         style_name=args.style,
         x_offset=args.x_offset,
         y_offset=args.y_offset,
+        side_position=args.side_position,
+        top_position=args.top_position,
         add_dimensions=args.add_dimensions,
     )
 

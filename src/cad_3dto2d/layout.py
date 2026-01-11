@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Literal
 
 from build123d import Axis, Compound
 from pydantic import BaseModel, ConfigDict
 
 from .types import BoundingBox2D, Point2D, Point3D, Shape
-from .views import ViewProjection, bounding_size
+from .views import ViewProjection
 
 
 class LayeredShapes(BaseModel):
@@ -62,6 +62,29 @@ def _layered_bounds(layered: LayeredShapes):
     return Compound(children=shapes).bounding_box()
 
 
+def _layered_bbox(layered: LayeredShapes) -> BoundingBox2D | None:
+    bounds = _layered_bounds(layered)
+    if not bounds:
+        return None
+    return (bounds.min.X, bounds.min.Y, bounds.max.X, bounds.max.Y)
+
+
+def _bbox_center(bbox: BoundingBox2D) -> Point2D:
+    return ((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
+
+
+def _side_offset(front_bbox: BoundingBox2D, side_bbox: BoundingBox2D, gap_x_mm: float, side_position: str) -> float:
+    if side_position == "right":
+        return front_bbox[2] - side_bbox[0] + gap_x_mm
+    return front_bbox[0] - side_bbox[2] - gap_x_mm
+
+
+def _top_offset(front_bbox: BoundingBox2D, top_bbox: BoundingBox2D, gap_y_mm: float, top_position: str) -> float:
+    if top_position == "up":
+        return front_bbox[3] - top_bbox[1] + gap_y_mm
+    return front_bbox[1] - top_bbox[3] - gap_y_mm
+
+
 def _combine_views(front: LayeredShapes, side_x: LayeredShapes, side_y: LayeredShapes) -> LayeredShapes:
     return LayeredShapes(
         visible=front.visible + side_x.visible + side_y.visible,
@@ -115,29 +138,44 @@ def layout_three_views(
     side_y: ViewProjection,
     gap_x_mm: float = 10.0,
     gap_y_mm: float = 10.0,
+    side_position: Literal["left", "right"] = "right",
+    top_position: Literal["up", "down"] = "down",
     frame_bbox_mm: BoundingBox2D | None = None,
     paper_size_mm: Point2D | None = None,
     scale: float | None = None,
 ) -> ThreeViewLayout:
-    front_size = front.bounding_size()
-
     front_layer = LayeredShapes(visible=list(front.visible), hidden=list(front.hidden))
     side_x_layer = LayeredShapes(
-        visible=_transform(side_x.visible, rotate_deg=90, translate=(front_size[0] + gap_x_mm, 0.0, 0.0)),
-        hidden=_transform(side_x.hidden, rotate_deg=90, translate=(front_size[0] + gap_x_mm, 0.0, 0.0)),
+        visible=_transform(side_x.visible, rotate_deg=90),
+        hidden=_transform(side_x.hidden, rotate_deg=90),
     )
     side_y_layer = LayeredShapes(
-        visible=_transform(side_y.visible, translate=(0.0, -(front_size[1] + gap_y_mm), 0.0)),
-        hidden=_transform(side_y.hidden, translate=(0.0, -(front_size[1] + gap_y_mm), 0.0)),
+        visible=list(side_y.visible),
+        hidden=list(side_y.hidden),
     )
 
+    front_bbox = _layered_bbox(front_layer)
+    side_x_bbox = _layered_bbox(side_x_layer)
+    side_y_bbox = _layered_bbox(side_y_layer)
+    if front_bbox and side_x_bbox:
+        dx = _side_offset(front_bbox, side_x_bbox, gap_x_mm, side_position)
+        side_x_layer = _transform_layered(side_x_layer, translate=(dx, 0.0, 0.0))
+    if front_bbox and side_y_bbox:
+        dy = _top_offset(front_bbox, side_y_bbox, gap_y_mm, top_position)
+        side_y_layer = _transform_layered(side_y_layer, translate=(0.0, dy, 0.0))
+
     combined = _combine_views(front_layer, side_x_layer, side_y_layer)
-    three_view_size = bounding_size(combined.visible + combined.hidden)
-    center_shift = (-(three_view_size[0] - front_size[0]) / 2, (three_view_size[1] - front_size[1]) / 2, 0.0)
-    front_layer = _transform_layered(front_layer, translate=center_shift)
-    side_x_layer = _transform_layered(side_x_layer, translate=center_shift)
-    side_y_layer = _transform_layered(side_y_layer, translate=center_shift)
-    combined = _combine_views(front_layer, side_x_layer, side_y_layer)
+    combined_bbox = _layered_bbox(combined)
+    front_bbox = _layered_bbox(front_layer)
+    if combined_bbox and front_bbox:
+        front_center = _bbox_center(front_bbox)
+        combined_center = _bbox_center(combined_bbox)
+        center_shift = (front_center[0] - combined_center[0], front_center[1] - combined_center[1], 0.0)
+        if center_shift != (0.0, 0.0, 0.0):
+            front_layer = _transform_layered(front_layer, translate=center_shift)
+            side_x_layer = _transform_layered(side_x_layer, translate=center_shift)
+            side_y_layer = _transform_layered(side_y_layer, translate=center_shift)
+            combined = _combine_views(front_layer, side_x_layer, side_y_layer)
 
     layout = ThreeViewLayout(front=front_layer, side_x=side_x_layer, side_y=side_y_layer, combined=combined)
     if frame_bbox_mm:

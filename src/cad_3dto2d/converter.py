@@ -109,6 +109,14 @@ def _centered_reserved_bounds(template_spec: TemplateSpec | None) -> list[Boundi
     return centered
 
 
+def _layered_bbox_2d(layered: LayeredShapes) -> BoundingBox2D | None:
+    shapes = layered.visible + layered.hidden
+    if not shapes:
+        return None
+    bounds = Compound(children=shapes).bounding_box()
+    return (bounds.min.X, bounds.min.Y, bounds.max.X, bounds.max.Y)
+
+
 def _clamp_offset(
     base: float,
     direction: int,
@@ -279,7 +287,7 @@ def _resolve_basic_dimension_specs(
             settings.decimal_places,
         )
         candidate_sides = [side]
-        if frame_bounds:
+        if frame_bounds or avoid_bounds:
             flipped = "bottom" if side == "top" else "top" if side in ("top", "bottom") else (
                 "left" if side == "right" else "right"
             )
@@ -288,7 +296,7 @@ def _resolve_basic_dimension_specs(
 
         selected_side = side
         selected_offset = primary_offset
-        if frame_bounds:
+        if frame_bounds or avoid_bounds:
             for candidate in candidate_sides:
                 candidate_plan = _basic_plan_for_side(bounds, orientation, candidate)
                 candidate_offset = _basic_offset_for_side(bounds, orientation, candidate, settings, frame_bounds)
@@ -396,12 +404,12 @@ def _dimension_text_for_plan(
 
 def _text_fits_bounds(
     text: DimensionText,
-    frame_bounds: BoundingBox2D,
+    frame_bounds: BoundingBox2D | None,
     padding: float,
     avoid_bounds: list[BoundingBox2D] | None = None,
 ) -> bool:
     bbox = _text_bounds(text)
-    if not _bbox_within_frame(bbox, frame_bounds, padding=padding):
+    if frame_bounds and not _bbox_within_frame(bbox, frame_bounds, padding=padding):
         return False
     if avoid_bounds:
         for block in avoid_bounds:
@@ -492,7 +500,7 @@ def _resolve_line_dimension_specs(
             return offset_value
 
         candidate_sides = [plan.side]
-        if frame_bounds:
+        if frame_bounds or avoid_bounds:
             flipped = "bottom" if plan.side == "top" else "top" if plan.side in ("top", "bottom") else (
                 "left" if plan.side == "right" else "right"
             )
@@ -501,7 +509,7 @@ def _resolve_line_dimension_specs(
 
         selected_side = plan.side
         selected_offset = resolve_offset(plan.side)
-        if frame_bounds:
+        if frame_bounds or avoid_bounds:
             for side in candidate_sides:
                 offset = resolve_offset(side)
                 text = _dimension_text_for_plan(plan, side, offset, label, settings)
@@ -533,7 +541,7 @@ def _resolve_diameter_dimension_specs(
 
         angle_candidates = [plan.leader_angle_deg, plan.leader_angle_deg + 180.0]
         selected_angle = plan.leader_angle_deg
-        if frame_bounds:
+        if frame_bounds or avoid_bounds:
             for angle in angle_candidates:
                 text = _diameter_text_for_angle(plan.center, plan.radius, angle, label, settings)
                 if _text_fits_bounds(text, frame_bounds, padding=padding, avoid_bounds=avoid_bounds):
@@ -584,12 +592,17 @@ def _generate_view_dimensions(
     return DimensionPlanOutput(basic_specs + line_specs, diameter_specs)
 
 
-# View configurations for three-view drawing
-VIEW_CONFIGS = [
-    ViewDimensionConfig(horizontal_dir=1, vertical_dir=1),   # front
-    ViewDimensionConfig(horizontal_dir=1, vertical_dir=1),   # side_x
-    ViewDimensionConfig(horizontal_dir=-1, vertical_dir=1),  # side_y
-]
+def _view_configs_for_layout(
+    side_position: Literal["left", "right"],
+    top_position: Literal["up", "down"],
+) -> list[ViewDimensionConfig]:
+    side_sign = 1 if side_position == "right" else -1
+    top_sign = 1 if top_position == "up" else -1
+    return [
+        ViewDimensionConfig(horizontal_dir=-top_sign, vertical_dir=-side_sign),  # front
+        ViewDimensionConfig(horizontal_dir=-top_sign, vertical_dir=side_sign),   # side_x
+        ViewDimensionConfig(horizontal_dir=top_sign, vertical_dir=-side_sign),   # side_y
+    ]
 
 
 def _build_layers(
@@ -598,6 +611,8 @@ def _build_layers(
     template_spec: TemplateSpec | None,
     x_offset: float,
     y_offset: float,
+    side_position: Literal["left", "right"],
+    top_position: Literal["up", "down"],
     add_dimensions: bool,
     dimension_settings: DimensionSettings | None,
     dimension_overrides: dict[str, object] | None,
@@ -612,6 +627,8 @@ def _build_layers(
         views.front,
         views.side_x,
         views.side_y,
+        side_position=side_position,
+        top_position=top_position,
         frame_bbox_mm=template_spec.frame_bbox_mm if template_spec else None,
         paper_size_mm=template_spec.paper_size_mm if template_spec else None,
         scale=template_spec.default_scale if template_spec else None,
@@ -630,9 +647,18 @@ def _build_layers(
             avoid_bounds = None
 
         layout_views = [layout.front, layout.side_x, layout.side_y]
-        for view, config in zip(layout_views, VIEW_CONFIGS):
+        view_bounds = [_layered_bbox_2d(view) for view in layout_views]
+        view_configs = _view_configs_for_layout(side_position, top_position)
+        for index, (view, config) in enumerate(zip(layout_views, view_configs)):
+            view_avoid = list(avoid_bounds) if avoid_bounds else []
+            for other_index, bounds in enumerate(view_bounds):
+                if other_index == index or not bounds:
+                    continue
+                view_avoid.append(bounds)
+            if not view_avoid:
+                view_avoid = None
             output = _generate_view_dimensions(
-                view, config, dimension_settings, dimension_overrides, frame_bounds, avoid_bounds=avoid_bounds,
+                view, config, dimension_settings, dimension_overrides, frame_bounds, avoid_bounds=view_avoid,
             )
             linear_dims.extend(output.linear)
             diameter_dims.extend(output.diameter)
@@ -736,6 +762,8 @@ def convert_2d_drawing(
     template_name: str = "A4_LandscapeTD",
     x_offset: float = 0,
     y_offset: float = 0,
+    side_position: Literal["left", "right"] = "right",
+    top_position: Literal["up", "down"] = "down",
     style_name: str | None = "iso",
     add_dimensions: bool = False,
     dimension_settings: DimensionSettings | None = None,
@@ -751,6 +779,8 @@ def convert_2d_drawing(
         template_spec,
         x_offset,
         y_offset,
+        side_position,
+        top_position,
         add_dimensions,
         dimension_settings,
         dimension_overrides,
