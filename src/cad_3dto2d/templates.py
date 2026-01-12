@@ -19,6 +19,8 @@ class TemplateBaseSpec(BaseModel):
     frame_bbox_mm: BoundingBox2D | None = None
     title_block_bbox_mm: BoundingBox2D | None = None
     reserved_bbox_mm: list[BoundingBox2D] = Field(default_factory=list)
+    side_position: Literal["left", "right"] | None = None
+    top_position: Literal["up", "down"] | None = None
     layout_offset_mm: Point2D = (0.0, 0.0)
     default_scale: float = 1.0
 

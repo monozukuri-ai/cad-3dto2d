@@ -605,14 +605,34 @@ def _view_configs_for_layout(
     ]
 
 
+def _resolve_layout_positions(
+    template_spec: TemplateSpec | None,
+    side_position: Literal["left", "right"] | None,
+    top_position: Literal["up", "down"] | None,
+) -> tuple[Literal["left", "right"], Literal["up", "down"]]:
+    resolved_side = side_position
+    if resolved_side is None and template_spec:
+        resolved_side = template_spec.side_position
+    if resolved_side is None:
+        resolved_side = "right"
+
+    resolved_top = top_position
+    if resolved_top is None and template_spec:
+        resolved_top = template_spec.top_position
+    if resolved_top is None:
+        resolved_top = "down"
+
+    return resolved_side, resolved_top
+
+
 def _build_layers(
     model,
     add_template: bool,
     template_spec: TemplateSpec | None,
     x_offset: float,
     y_offset: float,
-    side_position: Literal["left", "right"],
-    top_position: Literal["up", "down"],
+    side_position: Literal["left", "right"] | None,
+    top_position: Literal["up", "down"] | None,
     layout_offset_x: float,
     layout_offset_y: float,
     add_dimensions: bool,
@@ -628,13 +648,18 @@ def _build_layers(
     template_offset_y = template_spec.layout_offset_mm[1] if template_spec else 0.0
     combined_offset_x = template_offset_x + layout_offset_x
     combined_offset_y = template_offset_y + layout_offset_y
+    resolved_side_position, resolved_top_position = _resolve_layout_positions(
+        template_spec,
+        side_position,
+        top_position,
+    )
     views = project_three_views(model)
     layout = layout_three_views(
         views.front,
         views.side_x,
         views.side_y,
-        side_position=side_position,
-        top_position=top_position,
+        side_position=resolved_side_position,
+        top_position=resolved_top_position,
         layout_offset_x=combined_offset_x,
         layout_offset_y=combined_offset_y,
         frame_bbox_mm=template_spec.frame_bbox_mm if template_spec else None,
@@ -656,7 +681,7 @@ def _build_layers(
 
         layout_views = [layout.front, layout.side_x, layout.side_y]
         view_bounds = [_layered_bbox_2d(view) for view in layout_views]
-        view_configs = _view_configs_for_layout(side_position, top_position)
+        view_configs = _view_configs_for_layout(resolved_side_position, resolved_top_position)
         for index, (view, config) in enumerate(zip(layout_views, view_configs)):
             view_avoid = list(avoid_bounds) if avoid_bounds else []
             for other_index, bounds in enumerate(view_bounds):
@@ -770,8 +795,8 @@ def convert_2d_drawing(
     template_name: str = "A4_LandscapeTD",
     x_offset: float = 0,
     y_offset: float = 0,
-    side_position: Literal["left", "right"] = "right",
-    top_position: Literal["up", "down"] = "down",
+    side_position: Literal["left", "right"] | None = None,
+    top_position: Literal["up", "down"] | None = None,
     layout_offset_x: float = 0.0,
     layout_offset_y: float = 0.0,
     style_name: str | None = "iso",

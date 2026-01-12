@@ -20,15 +20,15 @@ def main():
         "--side_position",
         type=str,
         choices=("left", "right"),
-        default="right",
-        help="Place the side view on the left or right of the front view.",
+        default=None,
+        help="Place the side view on the left or right of the front view (defaults to template).",
     )
     parser.add_argument(
         "--top_position",
         type=str,
         choices=("up", "down"),
-        default="down",
-        help="Place the top view above or below the front view.",
+        default=None,
+        help="Place the top view above or below the front view (defaults to template).",
     )
     parser.add_argument("--layout_offset_x", type=float, default=0.0)
     parser.add_argument("--layout_offset_y", type=float, default=0.0)
