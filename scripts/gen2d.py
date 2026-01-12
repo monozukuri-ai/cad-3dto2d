@@ -32,6 +32,12 @@ def main():
     )
     parser.add_argument("--layout_offset_x", type=float, default=0.0)
     parser.add_argument("--layout_offset_y", type=float, default=0.0)
+    parser.add_argument(
+        "--layout_scale",
+        type=float,
+        default=None,
+        help="Scale factor for the three-view layout (views only; gaps unchanged).",
+    )
     parser.add_argument("--add_dimensions", action="store_true")
     args = parser.parse_args()
     formats = [fmt.strip().lower() for fmt in args.formats.split(",") if fmt.strip()]
@@ -41,6 +47,8 @@ def main():
     invalid = sorted(set(formats) - valid)
     if invalid:
         parser.error(f"Unsupported format(s): {', '.join(invalid)}")
+    if args.layout_scale is not None and args.layout_scale <= 0:
+        parser.error("--layout_scale must be greater than 0.")
 
     base, _ = os.path.splitext(args.step_file)
     outputs = set([f"{base}.{fmt}" for fmt in formats])
@@ -56,6 +64,7 @@ def main():
         top_position=args.top_position,
         layout_offset_x=args.layout_offset_x,
         layout_offset_y=args.layout_offset_y,
+        layout_scale=args.layout_scale,
         add_dimensions=args.add_dimensions,
     )
 

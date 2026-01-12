@@ -119,11 +119,22 @@ def _apply_layout_offset(layout: ThreeViewLayout, offset: Point2D) -> ThreeViewL
     return ThreeViewLayout(front=front, side_x=side_x, side_y=side_y, combined=combined)
 
 
+def _scale_layered_around_center(layered: LayeredShapes, scale: float) -> LayeredShapes:
+    if scale == 1.0:
+        return layered
+    bounds = _layered_bounds(layered)
+    if bounds is None:
+        return layered
+    center = bounds.center()
+    updated = _transform_layered(layered, translate=(-center.X, -center.Y, -center.Z))
+    updated = _transform_layered(updated, scale=scale)
+    return _transform_layered(updated, translate=(center.X, center.Y, center.Z))
+
+
 def align_three_view_layout(
     layout: ThreeViewLayout,
     frame_bbox_mm: BoundingBox2D,
     paper_size_mm: Point2D | None,
-    scale: float | None = None,
 ) -> ThreeViewLayout:
     bounds = _layered_bounds(layout.combined)
     if bounds is None:
@@ -146,8 +157,6 @@ def align_three_view_layout(
 
     def apply(layered: LayeredShapes) -> LayeredShapes:
         updated = _transform_layered(layered, translate=translate_to_origin)
-        if scale and scale != 1.0:
-            updated = _transform_layered(updated, scale=scale)
         if target_center != (0.0, 0.0, 0.0):
             updated = _transform_layered(updated, translate=target_center)
         return updated
@@ -182,6 +191,10 @@ def layout_three_views(
         visible=list(side_y.visible),
         hidden=list(side_y.hidden),
     )
+    if scale and scale != 1.0:
+        front_layer = _scale_layered_around_center(front_layer, scale)
+        side_x_layer = _scale_layered_around_center(side_x_layer, scale)
+        side_y_layer = _scale_layered_around_center(side_y_layer, scale)
 
     front_bbox = _layered_bbox(front_layer)
     side_x_bbox = _layered_bbox(side_x_layer)
@@ -218,18 +231,6 @@ def layout_three_views(
             layout,
             frame_bbox_mm=frame_bbox_mm,
             paper_size_mm=paper_size_mm,
-            scale=scale,
-        )
-    elif scale and scale != 1.0:
-        front_layer = _transform_layered(front_layer, scale=scale)
-        side_x_layer = _transform_layered(side_x_layer, scale=scale)
-        side_y_layer = _transform_layered(side_y_layer, scale=scale)
-        combined = _combine_views(front_layer, side_x_layer, side_y_layer)
-        layout = ThreeViewLayout(
-            front=front_layer,
-            side_x=side_x_layer,
-            side_y=side_y_layer,
-            combined=combined,
         )
     if layout_offset_x or layout_offset_y:
         layout = _apply_layout_offset(layout, (layout_offset_x, layout_offset_y))

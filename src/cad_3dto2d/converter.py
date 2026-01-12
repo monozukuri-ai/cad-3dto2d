@@ -701,6 +701,7 @@ def _build_layers(
     top_position: Literal["up", "down"] | None,
     layout_offset_x: float,
     layout_offset_y: float,
+    layout_scale: float | None,
     add_dimensions: bool,
     dimension_settings: DimensionSettings | None,
     dimension_overrides: dict[str, object] | None,
@@ -714,6 +715,9 @@ def _build_layers(
     template_offset_y = template_spec.layout_offset_mm[1] if template_spec else 0.0
     combined_offset_x = template_offset_x + layout_offset_x
     combined_offset_y = template_offset_y + layout_offset_y
+    resolved_scale = layout_scale
+    if resolved_scale is None and template_spec:
+        resolved_scale = template_spec.default_scale
     resolved_side_position, resolved_top_position = _resolve_layout_positions(
         template_spec,
         side_position,
@@ -730,7 +734,7 @@ def _build_layers(
         layout_offset_y=combined_offset_y,
         frame_bbox_mm=template_spec.frame_bbox_mm if template_spec else None,
         paper_size_mm=template_spec.paper_size_mm if template_spec else None,
-        scale=template_spec.default_scale if template_spec else None,
+        scale=resolved_scale,
     )
     layers["visible"] = layout.combined.visible
     layers["hidden"] = layout.combined.hidden
@@ -894,6 +898,7 @@ def convert_2d_drawing(
     top_position: Literal["up", "down"] | None = None,
     layout_offset_x: float = 0.0,
     layout_offset_y: float = 0.0,
+    layout_scale: float | None = None,
     style_name: str | None = "iso",
     add_dimensions: bool = False,
     dimension_settings: DimensionSettings | None = None,
@@ -913,6 +918,7 @@ def convert_2d_drawing(
         top_position,
         layout_offset_x,
         layout_offset_y,
+        layout_scale,
         add_dimensions,
         dimension_settings,
         dimension_overrides,
