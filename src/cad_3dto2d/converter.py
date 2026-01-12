@@ -16,7 +16,11 @@ from .annotations.dimensions import (
     LinearDimensionSpec,
     format_length,
 )
-from .annotations.features import FeatureCoordinates, extract_feature_coordinates, extract_primitives
+from .annotations.features import (
+    FeatureCoordinates,
+    extract_feature_coordinates,
+    extract_primitives,
+)
 from .annotations.planner import (
     PlannedDiameterDimension,
     PlannedDimension,
@@ -84,7 +88,9 @@ def _load_svg_template(template_spec: SvgTemplateSpec) -> ShapeList[Shape]:
     return import_svg(template_spec.file_path)
 
 
-def _centered_bbox(template_spec: TemplateSpec | None, bbox: BoundingBox2D | None) -> BoundingBox2D | None:
+def _centered_bbox(
+    template_spec: TemplateSpec | None, bbox: BoundingBox2D | None
+) -> BoundingBox2D | None:
     if not template_spec or not bbox:
         return None
     min_x, min_y, max_x, max_y = bbox
@@ -97,8 +103,6 @@ def _centered_bbox(template_spec: TemplateSpec | None, bbox: BoundingBox2D | Non
             max_y - paper_h / 2,
         )
     return (min_x, min_y, max_x, max_y)
-
-
 
 
 def _layered_bbox_2d(layered: LayeredShapes) -> BoundingBox2D | None:
@@ -124,13 +128,17 @@ def _clamp_offset(
     return -min(offset, max(0.0, available))
 
 
-def _estimate_text_width(text: str, height: float, width_factor: float = _TEXT_WIDTH_FACTOR) -> float:
+def _estimate_text_width(
+    text: str, height: float, width_factor: float = _TEXT_WIDTH_FACTOR
+) -> float:
     if not text:
         return 0.0
     return max(height * 0.4, len(text) * height * width_factor)
 
 
-def _text_bounds(text: DimensionText, width_factor: float = _TEXT_WIDTH_FACTOR) -> BoundingBox2D:
+def _text_bounds(
+    text: DimensionText, width_factor: float = _TEXT_WIDTH_FACTOR
+) -> BoundingBox2D:
     width = _estimate_text_width(text.text, text.height, width_factor=width_factor)
     if text.anchor == "start":
         min_x = text.x
@@ -152,7 +160,9 @@ def _bbox_intersects(a: BoundingBox2D, b: BoundingBox2D) -> bool:
     return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
 
 
-def _bbox_within_frame(bbox: BoundingBox2D, frame_bounds: BoundingBox2D, padding: float) -> bool:
+def _bbox_within_frame(
+    bbox: BoundingBox2D, frame_bounds: BoundingBox2D, padding: float
+) -> bool:
     frame_min_x, frame_min_y, frame_max_x, frame_max_y = frame_bounds
     return (
         bbox[0] >= frame_min_x + padding
@@ -185,11 +195,17 @@ def _dimension_base_for_plan(
 ) -> tuple[Point2D, float]:
     if plan.orientation == "horizontal":
         sign = 1 if side == "top" else -1
-        base_y = max(plan.p1[1], plan.p2[1]) if side == "top" else min(plan.p1[1], plan.p2[1])
+        base_y = (
+            max(plan.p1[1], plan.p2[1])
+            if side == "top"
+            else min(plan.p1[1], plan.p2[1])
+        )
         dim_y = base_y + sign * offset
         return (plan.p1[0], dim_y), 0.0
     sign = 1 if side == "right" else -1
-    base_x = max(plan.p1[0], plan.p2[0]) if side == "right" else min(plan.p1[0], plan.p2[0])
+    base_x = (
+        max(plan.p1[0], plan.p2[0]) if side == "right" else min(plan.p1[0], plan.p2[0])
+    )
     dim_x = base_x + sign * offset
     return (dim_x, plan.p1[1]), 90.0
 
@@ -250,10 +266,23 @@ def _basic_offset_for_side(
     if orientation == "horizontal":
         base = bounds.max.Y if side == "top" else bounds.min.Y
         direction = 1 if side == "top" else -1
-        return abs(_clamp_offset(base, direction, frame_min_y, frame_max_y, settings.offset, padding=padding))
+        return abs(
+            _clamp_offset(
+                base,
+                direction,
+                frame_min_y,
+                frame_max_y,
+                settings.offset,
+                padding=padding,
+            )
+        )
     base = bounds.max.X if side == "right" else bounds.min.X
     direction = 1 if side == "right" else -1
-    return abs(_clamp_offset(base, direction, frame_min_x, frame_max_x, settings.offset, padding=padding))
+    return abs(
+        _clamp_offset(
+            base, direction, frame_min_x, frame_max_x, settings.offset, padding=padding
+        )
+    )
 
 
 def _resolve_basic_dimension_specs(
@@ -271,7 +300,9 @@ def _resolve_basic_dimension_specs(
         ("vertical", config.vertical_side),
     ):
         primary_plan = _basic_plan_for_side(bounds, orientation, side)
-        primary_offset = _basic_offset_for_side(bounds, orientation, side, settings, frame_bounds)
+        primary_offset = _basic_offset_for_side(
+            bounds, orientation, side, settings, frame_bounds
+        )
         label = format_length(
             abs(primary_plan.p2[0] - primary_plan.p1[0])
             if orientation == "horizontal"
@@ -284,15 +315,25 @@ def _resolve_basic_dimension_specs(
         if len(candidate_sides) > 1:
             for candidate in candidate_sides:
                 candidate_plan = _basic_plan_for_side(bounds, orientation, candidate)
-                candidate_offset = _basic_offset_for_side(bounds, orientation, candidate, settings, frame_bounds)
-                text = _dimension_text_for_plan(candidate_plan, candidate, candidate_offset, label, settings)
-                if _text_fits_bounds(text, frame_bounds, padding=padding, avoid_bounds=avoid_bounds):
+                candidate_offset = _basic_offset_for_side(
+                    bounds, orientation, candidate, settings, frame_bounds
+                )
+                text = _dimension_text_for_plan(
+                    candidate_plan, candidate, candidate_offset, label, settings
+                )
+                if _text_fits_bounds(
+                    text, frame_bounds, padding=padding, avoid_bounds=avoid_bounds
+                ):
                     selected_side = candidate
                     selected_offset = candidate_offset
                     primary_plan = candidate_plan
                     break
 
-        specs.append(_linear_dimension_spec(primary_plan, selected_side, selected_offset, label, settings))
+        specs.append(
+            _linear_dimension_spec(
+                primary_plan, selected_side, selected_offset, label, settings
+            )
+        )
     return specs
 
 
@@ -329,11 +370,17 @@ def _plan_feature_dimensions(
         )
 
     line_dims, diameter_dims = apply_planning_rules(
-        hole_positions, pitch_line_dims, internal_dims, hole_diameters, rules=rules,
+        hole_positions,
+        pitch_line_dims,
+        internal_dims,
+        hole_diameters,
+        rules=rules,
     )
 
     # Collapse diameter dimensions when pitch patterns exist
-    if rules.collapse_diameter_with_pitch and (pitch_axes["horizontal"] or pitch_axes["vertical"]):
+    if rules.collapse_diameter_with_pitch and (
+        pitch_axes["horizontal"] or pitch_axes["vertical"]
+    ):
         groups = group_circles_by_radius(features.circles)
         collapsed: list[PlannedDiameterDimension] = []
         angle_candidates = [45, 135] if config.horizontal_dir >= 0 else [-45, -135]
@@ -368,7 +415,11 @@ def _dimension_text_for_plan(
 ) -> DimensionText:
     if plan.orientation == "horizontal":
         sign = 1 if side == "top" else -1
-        dim_y = (max(plan.p1[1], plan.p2[1]) if side == "top" else min(plan.p1[1], plan.p2[1])) + sign * offset
+        dim_y = (
+            max(plan.p1[1], plan.p2[1])
+            if side == "top"
+            else min(plan.p1[1], plan.p2[1])
+        ) + sign * offset
         return DimensionText(
             x=(plan.p1[0] + plan.p2[0]) / 2,
             y=dim_y + sign * settings.text_gap,
@@ -377,7 +428,9 @@ def _dimension_text_for_plan(
             anchor="middle",
         )
     sign = 1 if side == "right" else -1
-    dim_x = (max(plan.p1[0], plan.p2[0]) if side == "right" else min(plan.p1[0], plan.p2[0])) + sign * offset
+    dim_x = (
+        max(plan.p1[0], plan.p2[0]) if side == "right" else min(plan.p1[0], plan.p2[0])
+    ) + sign * offset
     return DimensionText(
         x=dim_x + sign * settings.text_gap,
         y=(plan.p1[1] + plan.p2[1]) / 2,
@@ -413,9 +466,14 @@ def _diameter_text_for_angle(
     angle_rad = math.radians(angle_deg)
     dir_x = math.cos(angle_rad)
     dir_y = math.sin(angle_rad)
-    leader_length = settings.arrow_size * 4 + settings.text_gap * 2 + settings.text_height
+    leader_length = (
+        settings.arrow_size * 4 + settings.text_gap * 2 + settings.text_height
+    )
     arrow_tip = (center[0] + dir_x * radius, center[1] + dir_y * radius)
-    leader_end = (arrow_tip[0] + dir_x * leader_length, arrow_tip[1] + dir_y * leader_length)
+    leader_end = (
+        arrow_tip[0] + dir_x * leader_length,
+        arrow_tip[1] + dir_y * leader_length,
+    )
     text_pos = (
         leader_end[0] + dir_x * settings.text_gap,
         leader_end[1] + dir_y * settings.text_gap,
@@ -458,7 +516,11 @@ def _resolve_line_dimension_specs(
             if frame_bounds:
                 frame_min_x, frame_min_y, frame_max_x, frame_max_y = frame_bounds
                 if plan.orientation == "horizontal":
-                    base = max(plan.p1[1], plan.p2[1]) if side == "top" else min(plan.p1[1], plan.p2[1])
+                    base = (
+                        max(plan.p1[1], plan.p2[1])
+                        if side == "top"
+                        else min(plan.p1[1], plan.p2[1])
+                    )
                     direction = 1 if side == "top" else -1
                     return abs(
                         _clamp_offset(
@@ -470,7 +532,11 @@ def _resolve_line_dimension_specs(
                             padding=settings.text_gap + settings.text_height,
                         )
                     )
-                base = max(plan.p1[0], plan.p2[0]) if side == "right" else min(plan.p1[0], plan.p2[0])
+                base = (
+                    max(plan.p1[0], plan.p2[0])
+                    if side == "right"
+                    else min(plan.p1[0], plan.p2[0])
+                )
                 direction = 1 if side == "right" else -1
                 return abs(
                     _clamp_offset(
@@ -484,20 +550,28 @@ def _resolve_line_dimension_specs(
                 )
             return offset_value
 
-        candidate_sides = _candidate_sides(plan.side, bool(frame_bounds or avoid_bounds))
+        candidate_sides = _candidate_sides(
+            plan.side, bool(frame_bounds or avoid_bounds)
+        )
         selected_side = plan.side
         selected_offset = resolve_offset(plan.side)
         if len(candidate_sides) > 1:
             for side in candidate_sides:
                 offset = resolve_offset(side)
                 text = _dimension_text_for_plan(plan, side, offset, label, settings)
-                if _text_fits_bounds(text, frame_bounds, padding=padding, avoid_bounds=avoid_bounds):
+                if _text_fits_bounds(
+                    text, frame_bounds, padding=padding, avoid_bounds=avoid_bounds
+                ):
                     selected_side = side
                     selected_offset = offset
                     break
 
         lane_index[selected_side] += 1
-        specs.append(_linear_dimension_spec(plan, selected_side, selected_offset, label, settings))
+        specs.append(
+            _linear_dimension_spec(
+                plan, selected_side, selected_offset, label, settings
+            )
+        )
 
     return specs
 
@@ -521,8 +595,12 @@ def _resolve_diameter_dimension_specs(
         selected_angle = plan.leader_angle_deg
         if frame_bounds or avoid_bounds:
             for angle in angle_candidates:
-                text = _diameter_text_for_angle(plan.center, plan.radius, angle, label, settings)
-                if _text_fits_bounds(text, frame_bounds, padding=padding, avoid_bounds=avoid_bounds):
+                text = _diameter_text_for_angle(
+                    plan.center, plan.radius, angle, label, settings
+                )
+                if _text_fits_bounds(
+                    text, frame_bounds, padding=padding, avoid_bounds=avoid_bounds
+                ):
                     selected_angle = angle
                     break
 
@@ -552,20 +630,30 @@ def _generate_view_dimensions(
     if not shapes:
         return DimensionPlanOutput([], [])
 
-    settings = _resolve_dimension_settings(shapes, dimension_settings, dimension_overrides)
+    settings = _resolve_dimension_settings(
+        shapes, dimension_settings, dimension_overrides
+    )
     rules = PlanningRules()
 
     # Generate basic bounding box dimension specs
-    basic_specs = _resolve_basic_dimension_specs(shapes, settings, config, frame_bounds, avoid_bounds)
+    basic_specs = _resolve_basic_dimension_specs(
+        shapes, settings, config, frame_bounds, avoid_bounds
+    )
 
     # Extract and plan feature dimensions
     primitives = extract_primitives(shapes)
     features = extract_feature_coordinates(primitives)
-    line_dims, diameter_dims, _ = _plan_feature_dimensions(features, config, settings, rules)
+    line_dims, diameter_dims, _ = _plan_feature_dimensions(
+        features, config, settings, rules
+    )
 
     # Resolve planned dimensions into DXF-ready specs
-    line_specs = _resolve_line_dimension_specs(line_dims, settings, frame_bounds, avoid_bounds=avoid_bounds)
-    diameter_specs = _resolve_diameter_dimension_specs(diameter_dims, settings, frame_bounds, avoid_bounds=avoid_bounds)
+    line_specs = _resolve_line_dimension_specs(
+        line_dims, settings, frame_bounds, avoid_bounds=avoid_bounds
+    )
+    diameter_specs = _resolve_diameter_dimension_specs(
+        diameter_dims, settings, frame_bounds, avoid_bounds=avoid_bounds
+    )
 
     return DimensionPlanOutput(basic_specs + line_specs, diameter_specs)
 
@@ -578,8 +666,8 @@ def _view_configs_for_layout(
     top_sign = 1 if top_position == "up" else -1
     return [
         ViewDimensionConfig(horizontal_dir=-top_sign, vertical_dir=-side_sign),  # front
-        ViewDimensionConfig(horizontal_dir=-top_sign, vertical_dir=side_sign),   # side_x
-        ViewDimensionConfig(horizontal_dir=top_sign, vertical_dir=-side_sign),   # side_y
+        ViewDimensionConfig(horizontal_dir=-top_sign, vertical_dir=side_sign),  # side_x
+        ViewDimensionConfig(horizontal_dir=top_sign, vertical_dir=-side_sign),  # side_y
     ]
 
 
@@ -649,8 +737,12 @@ def _build_layers(
 
     # Generate dimensions for each view
     if add_dimensions:
-        frame_bounds = _centered_bbox(template_spec, template_spec.frame_bbox_mm if template_spec else None)
-        title_block_bounds = _centered_bbox(template_spec, template_spec.title_block_bbox_mm if template_spec else None)
+        frame_bounds = _centered_bbox(
+            template_spec, template_spec.frame_bbox_mm if template_spec else None
+        )
+        title_block_bounds = _centered_bbox(
+            template_spec, template_spec.title_block_bbox_mm if template_spec else None
+        )
         avoid_bounds: list[BoundingBox2D] = []
         if template_spec and template_spec.reserved_bbox_mm:
             for bbox in template_spec.reserved_bbox_mm:
@@ -664,7 +756,9 @@ def _build_layers(
 
         layout_views = [layout.front, layout.side_x, layout.side_y]
         view_bounds = [_layered_bbox_2d(view) for view in layout_views]
-        view_configs = _view_configs_for_layout(resolved_side_position, resolved_top_position)
+        view_configs = _view_configs_for_layout(
+            resolved_side_position, resolved_top_position
+        )
         for index, (view, config) in enumerate(zip(layout_views, view_configs)):
             view_avoid = list(avoid_bounds) if avoid_bounds else []
             for other_index, bounds in enumerate(view_bounds):
@@ -674,7 +768,12 @@ def _build_layers(
             if not view_avoid:
                 view_avoid = None
             output = _generate_view_dimensions(
-                view, config, dimension_settings, dimension_overrides, frame_bounds, avoid_bounds=view_avoid,
+                view,
+                config,
+                dimension_settings,
+                dimension_overrides,
+                frame_bounds,
+                avoid_bounds=view_avoid,
             )
             linear_dims.extend(output.linear)
             diameter_dims.extend(output.diameter)
@@ -721,7 +820,9 @@ def _export_outputs(
     x_offset: float,
     y_offset: float,
 ) -> None:
-    with tempfile.NamedTemporaryFile(dir=os.getcwd(), suffix=".dxf", delete=False) as tmp_dxf:
+    with tempfile.NamedTemporaryFile(
+        dir=os.getcwd(), suffix=".dxf", delete=False
+    ) as tmp_dxf:
         base_dxf = tmp_dxf.name
     try:
         export_dxf_layers(layers, base_dxf, line_weight, line_types=line_types)
@@ -736,10 +837,15 @@ def _export_outputs(
     if dimension_plans.linear or dimension_plans.diameter:
         add_ezdxf_dimensions(doc, dimension_plans.linear, dimension_plans.diameter)
 
-    needs_svg = any(os.path.splitext(path)[1].lower() in {".svg", ".png", ".jpg", ".jpeg"} for path in output_files)
+    needs_svg = any(
+        os.path.splitext(path)[1].lower() in {".svg", ".png", ".jpg", ".jpeg"}
+        for path in output_files
+    )
     svg_payload = None
     if needs_svg:
-        page_size = _page_size_from_layers(layers, template_spec, add_template=add_template)
+        page_size = _page_size_from_layers(
+            layers, template_spec, add_template=add_template
+        )
         svg_payload = render_dxf_to_svg(doc, page_size_mm=page_size)
 
     for output_file in output_files:
@@ -750,15 +856,21 @@ def _export_outputs(
             continue
         if ext == ".svg":
             if svg_payload is None:
-                page_size = _page_size_from_layers(layers, template_spec, add_template=add_template)
+                page_size = _page_size_from_layers(
+                    layers, template_spec, add_template=add_template
+                )
                 svg_payload = render_dxf_to_svg(doc, page_size_mm=page_size)
             Path(output_file).write_text(svg_payload, encoding="utf-8")
             continue
         if ext[1:] in RASTER_IMAGE_TYPES:
             if svg_payload is None:
-                page_size = _page_size_from_layers(layers, template_spec, add_template=add_template)
+                page_size = _page_size_from_layers(
+                    layers, template_spec, add_template=add_template
+                )
                 svg_payload = render_dxf_to_svg(doc, page_size_mm=page_size)
-            with tempfile.NamedTemporaryFile(dir=os.getcwd(), suffix=".svg", delete=False) as tmp_svg:
+            with tempfile.NamedTemporaryFile(
+                dir=os.getcwd(), suffix=".svg", delete=False
+            ) as tmp_svg:
                 tmp_svg.write(svg_payload.encode("utf-8"))
                 svg_path = tmp_svg.name
             try:

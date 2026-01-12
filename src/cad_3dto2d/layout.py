@@ -50,8 +50,12 @@ def _transform_layered(
     translate: Point3D = (0.0, 0.0, 0.0),
 ) -> LayeredShapes:
     return LayeredShapes(
-        visible=_transform(layered.visible, rotate_deg=rotate_deg, scale=scale, translate=translate),
-        hidden=_transform(layered.hidden, rotate_deg=rotate_deg, scale=scale, translate=translate),
+        visible=_transform(
+            layered.visible, rotate_deg=rotate_deg, scale=scale, translate=translate
+        ),
+        hidden=_transform(
+            layered.hidden, rotate_deg=rotate_deg, scale=scale, translate=translate
+        ),
     )
 
 
@@ -73,19 +77,31 @@ def _bbox_center(bbox: BoundingBox2D) -> Point2D:
     return ((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
 
 
-def _side_offset(front_bbox: BoundingBox2D, side_bbox: BoundingBox2D, gap_x_mm: float, side_position: str) -> float:
+def _side_offset(
+    front_bbox: BoundingBox2D,
+    side_bbox: BoundingBox2D,
+    gap_x_mm: float,
+    side_position: str,
+) -> float:
     if side_position == "right":
         return front_bbox[2] - side_bbox[0] + gap_x_mm
     return front_bbox[0] - side_bbox[2] - gap_x_mm
 
 
-def _top_offset(front_bbox: BoundingBox2D, top_bbox: BoundingBox2D, gap_y_mm: float, top_position: str) -> float:
+def _top_offset(
+    front_bbox: BoundingBox2D,
+    top_bbox: BoundingBox2D,
+    gap_y_mm: float,
+    top_position: str,
+) -> float:
     if top_position == "up":
         return front_bbox[3] - top_bbox[1] + gap_y_mm
     return front_bbox[1] - top_bbox[3] - gap_y_mm
 
 
-def _combine_views(front: LayeredShapes, side_x: LayeredShapes, side_y: LayeredShapes) -> LayeredShapes:
+def _combine_views(
+    front: LayeredShapes, side_x: LayeredShapes, side_y: LayeredShapes
+) -> LayeredShapes:
     return LayeredShapes(
         visible=front.visible + side_x.visible + side_y.visible,
         hidden=front.hidden + side_x.hidden + side_y.hidden,
@@ -183,14 +199,20 @@ def layout_three_views(
     if combined_bbox and front_bbox:
         front_center = _bbox_center(front_bbox)
         combined_center = _bbox_center(combined_bbox)
-        center_shift = (front_center[0] - combined_center[0], front_center[1] - combined_center[1], 0.0)
+        center_shift = (
+            front_center[0] - combined_center[0],
+            front_center[1] - combined_center[1],
+            0.0,
+        )
         if center_shift != (0.0, 0.0, 0.0):
             front_layer = _transform_layered(front_layer, translate=center_shift)
             side_x_layer = _transform_layered(side_x_layer, translate=center_shift)
             side_y_layer = _transform_layered(side_y_layer, translate=center_shift)
             combined = _combine_views(front_layer, side_x_layer, side_y_layer)
 
-    layout = ThreeViewLayout(front=front_layer, side_x=side_x_layer, side_y=side_y_layer, combined=combined)
+    layout = ThreeViewLayout(
+        front=front_layer, side_x=side_x_layer, side_y=side_y_layer, combined=combined
+    )
     if frame_bbox_mm:
         layout = align_three_view_layout(
             layout,
@@ -203,7 +225,12 @@ def layout_three_views(
         side_x_layer = _transform_layered(side_x_layer, scale=scale)
         side_y_layer = _transform_layered(side_y_layer, scale=scale)
         combined = _combine_views(front_layer, side_x_layer, side_y_layer)
-        layout = ThreeViewLayout(front=front_layer, side_x=side_x_layer, side_y=side_y_layer, combined=combined)
+        layout = ThreeViewLayout(
+            front=front_layer,
+            side_x=side_x_layer,
+            side_y=side_y_layer,
+            combined=combined,
+        )
     if layout_offset_x or layout_offset_y:
         layout = _apply_layout_offset(layout, (layout_offset_x, layout_offset_y))
     return layout

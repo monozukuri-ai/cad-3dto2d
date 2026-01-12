@@ -5,7 +5,14 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 from .types import BoundingBox2D, Point2D
 
@@ -44,7 +51,12 @@ class MarginSpec(BaseModel):
         if isinstance(value, MarginSpec):
             return value
         if isinstance(value, (int, float)):
-            return cls(left=float(value), right=float(value), top=float(value), bottom=float(value))
+            return cls(
+                left=float(value),
+                right=float(value),
+                top=float(value),
+                bottom=float(value),
+            )
         if isinstance(value, dict):
             return cls(**value)
         raise ValueError("margin_mm must be a number or mapping")
@@ -121,7 +133,9 @@ class TitleBlockCellSpec(BaseModel):
 class TitleBlockSpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    pos: Literal["top_right", "bottom_right", "top_left", "bottom_left"] = "bottom_right"
+    pos: Literal["top_right", "bottom_right", "top_left", "bottom_left"] = (
+        "bottom_right"
+    )
     size_mm: Point2D
     grid: TitleBlockGridSpec | None = None
     cells: list[TitleBlockCellSpec] = Field(default_factory=list)
@@ -158,12 +172,18 @@ class ParametricTemplateSpec(TemplateBaseSpec):
     def _populate_bounds(self) -> "ParametricTemplateSpec":
         if not self.paper_size_mm:
             raise ValueError("paper_size_mm is required for parametric templates")
-        frame_bbox = self.frame_bbox_mm or _frame_bbox_from_margin(self.paper_size_mm, self.frame.margin_mm)
+        frame_bbox = self.frame_bbox_mm or _frame_bbox_from_margin(
+            self.paper_size_mm, self.frame.margin_mm
+        )
         title_bbox = self.title_block_bbox_mm
         if self.title_block and not title_bbox:
             title_bbox = _title_block_bbox_from_spec(frame_bbox, self.title_block)
         _validate_bbox(frame_bbox, "frame_bbox_mm")
-        _validate_bbox_inside(frame_bbox, (0.0, 0.0, self.paper_size_mm[0], self.paper_size_mm[1]), "frame_bbox_mm")
+        _validate_bbox_inside(
+            frame_bbox,
+            (0.0, 0.0, self.paper_size_mm[0], self.paper_size_mm[1]),
+            "frame_bbox_mm",
+        )
         if title_bbox:
             _validate_bbox(title_bbox, "title_block_bbox_mm")
             _validate_bbox_inside(title_bbox, frame_bbox, "title_block_bbox_mm")
@@ -175,11 +195,15 @@ class ParametricTemplateSpec(TemplateBaseSpec):
         )
 
 
-TemplateSpec = Annotated[SvgTemplateSpec | ParametricTemplateSpec, Field(discriminator="kind")]
+TemplateSpec = Annotated[
+    SvgTemplateSpec | ParametricTemplateSpec, Field(discriminator="kind")
+]
 _TEMPLATE_ADAPTER = TypeAdapter(TemplateSpec)
 
 
-def _frame_bbox_from_margin(paper_size_mm: Point2D, margin: MarginSpec) -> BoundingBox2D:
+def _frame_bbox_from_margin(
+    paper_size_mm: Point2D, margin: MarginSpec
+) -> BoundingBox2D:
     paper_w, paper_h = paper_size_mm
     min_x = margin.left
     min_y = margin.bottom
@@ -188,7 +212,9 @@ def _frame_bbox_from_margin(paper_size_mm: Point2D, margin: MarginSpec) -> Bound
     return (min_x, min_y, max_x, max_y)
 
 
-def _title_block_bbox_from_spec(frame_bbox: BoundingBox2D, title_block: TitleBlockSpec) -> BoundingBox2D:
+def _title_block_bbox_from_spec(
+    frame_bbox: BoundingBox2D, title_block: TitleBlockSpec
+) -> BoundingBox2D:
     min_x, min_y, max_x, max_y = frame_bbox
     width, height = title_block.size_mm
     if title_block.pos == "bottom_right":
@@ -206,8 +232,15 @@ def _validate_bbox(bbox: BoundingBox2D, label: str) -> None:
         raise ValueError(f"{label} must have positive width/height")
 
 
-def _validate_bbox_inside(inner: BoundingBox2D, outer: BoundingBox2D, label: str) -> None:
-    if inner[0] < outer[0] or inner[1] < outer[1] or inner[2] > outer[2] or inner[3] > outer[3]:
+def _validate_bbox_inside(
+    inner: BoundingBox2D, outer: BoundingBox2D, label: str
+) -> None:
+    if (
+        inner[0] < outer[0]
+        or inner[1] < outer[1]
+        or inner[2] > outer[2]
+        or inner[3] > outer[3]
+    ):
         raise ValueError(f"{label} must be inside frame_bbox_mm")
 
 
@@ -225,7 +258,9 @@ def _load_index(index_path: str) -> dict[str, Any]:
     return data
 
 
-def load_template(template_name: str, templates_dir: Path | None = None) -> TemplateSpec:
+def load_template(
+    template_name: str, templates_dir: Path | None = None
+) -> TemplateSpec:
     templates_dir = _templates_dir(templates_dir)
     index_path = templates_dir / "index.yaml"
     data = _load_index(str(index_path))

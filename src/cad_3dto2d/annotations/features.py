@@ -84,7 +84,9 @@ def extract_primitives(shapes: Iterable[Shape], tol: float = 1e-6) -> PrimitiveR
                 orientation = "vertical"
             else:
                 orientation = "other"
-            lines.append(LinePrimitive(p1=(p1.X, p1.Y), p2=(p2.X, p2.Y), orientation=orientation))
+            lines.append(
+                LinePrimitive(p1=(p1.X, p1.Y), p2=(p2.X, p2.Y), orientation=orientation)
+            )
         elif geom_type == GeomType.CIRCLE:
             center = edge.arc_center
             radius = edge.radius
@@ -93,7 +95,9 @@ def extract_primitives(shapes: Iterable[Shape], tol: float = 1e-6) -> PrimitiveR
     return PrimitiveResult(lines=lines, circles=circles, bounds=bounds)
 
 
-def extract_feature_coordinates(primitives: PrimitiveResult, tol: float = 1e-3) -> FeatureCoordinates:
+def extract_feature_coordinates(
+    primitives: PrimitiveResult, tol: float = 1e-3
+) -> FeatureCoordinates:
     xmin, ymin, xmax, ymax = primitives.bounds
     vertical_x: list[float] = []
     horizontal_y: list[float] = []
@@ -115,10 +119,14 @@ def extract_feature_coordinates(primitives: PrimitiveResult, tol: float = 1e-3) 
     ]
     circles = _dedupe_circles(primitives.circles, tol=tol)
     circles = _filter_hole_circles(circles, primitives.bounds)
-    return FeatureCoordinates(x_coords=x_coords, y_coords=y_coords, circles=circles, bounds=primitives.bounds)
+    return FeatureCoordinates(
+        x_coords=x_coords, y_coords=y_coords, circles=circles, bounds=primitives.bounds
+    )
 
 
-def _dedupe_circles(circles: list[CirclePrimitive], tol: float) -> list[CirclePrimitive]:
+def _dedupe_circles(
+    circles: list[CirclePrimitive], tol: float
+) -> list[CirclePrimitive]:
     if not circles:
         return []
     circles = sorted(circles, key=lambda c: (c.center[0], c.center[1], c.radius))

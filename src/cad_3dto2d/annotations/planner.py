@@ -56,7 +56,9 @@ def _select_coords(coords: list[float], max_count: int) -> list[float]:
     return [coords[0], coords[-1]]
 
 
-def _group_circle_indices(circles: list[CirclePrimitive], axis: int, tol: float) -> list[list[int]]:
+def _group_circle_indices(
+    circles: list[CirclePrimitive], axis: int, tol: float
+) -> list[list[int]]:
     if not circles:
         return []
     indexed = list(enumerate(circles))
@@ -90,7 +92,11 @@ def _detect_pitch_dimension(
     sorted_indices = sorted(group_indices, key=lambda i: circles[i].center[axis])
     group_circles = [circles[i] for i in sorted_indices]
     coords = [c.center[axis] for c in group_circles]
-    diffs = [coords[i + 1] - coords[i] for i in range(len(coords) - 1) if coords[i + 1] > coords[i]]
+    diffs = [
+        coords[i + 1] - coords[i]
+        for i in range(len(coords) - 1)
+        if coords[i + 1] > coords[i]
+    ]
     if not diffs:
         return None
     pitch = sum(diffs) / len(diffs)
@@ -158,7 +164,12 @@ def plan_hole_dimensions(
     min_pitch_count: int = 3,
     pitch_tol_ratio: float = 0.1,
     min_pitch: float = 0.5,
-) -> tuple[list[PlannedDimension], list[PlannedDiameterDimension], list[PlannedPitchDimension], dict[str, bool]]:
+) -> tuple[
+    list[PlannedDimension],
+    list[PlannedDiameterDimension],
+    list[PlannedPitchDimension],
+    dict[str, bool],
+]:
     xmin, ymin, xmax, ymax = features.bounds
     position_dims: list[PlannedDimension] = []
     diameter_dims: list[PlannedDiameterDimension] = []
@@ -171,7 +182,9 @@ def plan_hole_dimensions(
         for idx, circle in enumerate(circles[:max_circles]):
             angle = angle_candidates[idx % len(angle_candidates)]
             diameter_dims.append(
-                PlannedDiameterDimension(center=circle.center, radius=circle.radius, leader_angle_deg=angle)
+                PlannedDiameterDimension(
+                    center=circle.center, radius=circle.radius, leader_angle_deg=angle
+                )
             )
         tol = 1e-3
         horizontal_groups = _group_circle_indices(circles, axis=1, tol=tol)
@@ -181,7 +194,14 @@ def plan_hole_dimensions(
         for group in horizontal_groups:
             if len(group) < min_pitch_count:
                 continue
-            pitch_dim = _detect_pitch_dimension(circles, group, axis=0, side=horizontal_side, min_pitch=min_pitch, pitch_tol_ratio=pitch_tol_ratio)
+            pitch_dim = _detect_pitch_dimension(
+                circles,
+                group,
+                axis=0,
+                side=horizontal_side,
+                min_pitch=min_pitch,
+                pitch_tol_ratio=pitch_tol_ratio,
+            )
             if pitch_dim:
                 skip_horizontal.update(group)
                 pitch_dims.append(pitch_dim)
@@ -189,7 +209,14 @@ def plan_hole_dimensions(
         for group in vertical_groups:
             if len(group) < min_pitch_count:
                 continue
-            pitch_dim = _detect_pitch_dimension(circles, group, axis=1, side=vertical_side, min_pitch=min_pitch, pitch_tol_ratio=pitch_tol_ratio)
+            pitch_dim = _detect_pitch_dimension(
+                circles,
+                group,
+                axis=1,
+                side=vertical_side,
+                min_pitch=min_pitch,
+                pitch_tol_ratio=pitch_tol_ratio,
+            )
             if pitch_dim:
                 skip_vertical.update(group)
                 pitch_dims.append(pitch_dim)

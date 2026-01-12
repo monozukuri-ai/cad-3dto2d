@@ -7,8 +7,17 @@ from ezdxf.addons.drawing.config import BackgroundPolicy, Configuration
 from ezdxf.addons.drawing.svg import SVGBackend
 from ezdxf.enums import TextEntityAlignment
 
-from ..annotations.dimensions import DiameterDimensionSpec, DimensionSettings, LinearDimensionSpec
-from ..templates import ParametricTemplateSpec, TemplateSpec, TitleBlockCellSpec, TitleBlockSpec
+from ..annotations.dimensions import (
+    DiameterDimensionSpec,
+    DimensionSettings,
+    LinearDimensionSpec,
+)
+from ..templates import (
+    ParametricTemplateSpec,
+    TemplateSpec,
+    TitleBlockCellSpec,
+    TitleBlockSpec,
+)
 from ..types import BoundingBox2D, Shape
 
 _LINE_TYPES: dict[str, LineType] = {
@@ -34,7 +43,9 @@ def export_dxf_layers(
     ordered_layers = [name for name in layer_order if name in layers]
     ordered_layers.extend(name for name in layers if name not in layer_order)
     for layer_name in ordered_layers:
-        exporter.add_layer(layer_name, line_type=resolved_types.get(layer_name, LineType.CONTINUOUS))
+        exporter.add_layer(
+            layer_name, line_type=resolved_types.get(layer_name, LineType.CONTINUOUS)
+        )
     for layer_name in ordered_layers:
         exporter.add_shape(layers[layer_name], layer=layer_name)
     exporter.write(output_file)
@@ -61,8 +72,12 @@ def _dimension_overrides(settings: DimensionSettings) -> dict[str, float | int |
     override: dict[str, float | int | str] = {
         "dimtxt": settings.text_height,
         "dimasz": settings.arrow_size,
-        "dimexo": settings.extension_offset if settings.extension_offset is not None else settings.extension_gap,
-        "dimexe": settings.extension_extension if settings.extension_extension is not None else settings.extension_gap,
+        "dimexo": settings.extension_offset
+        if settings.extension_offset is not None
+        else settings.extension_gap,
+        "dimexe": settings.extension_extension
+        if settings.extension_extension is not None
+        else settings.extension_gap,
         "dimgap": settings.text_gap,
         "dimdec": settings.decimal_places,
     }
@@ -85,12 +100,16 @@ def _apply_parametric_template(
     msp = doc.modelspace()
     _ensure_layer(doc, "template")
     _ensure_layer(doc, "title")
-    frame_bbox = _centered_bbox(template_spec.frame_bbox_mm, template_spec.paper_size_mm)
+    frame_bbox = _centered_bbox(
+        template_spec.frame_bbox_mm, template_spec.paper_size_mm
+    )
     if frame_bbox:
         frame_bbox = _offset_bbox(frame_bbox, x_offset, y_offset)
         _add_bbox_rect(msp, frame_bbox, layer="template")
     if template_spec.title_block_bbox_mm:
-        title_bbox = _centered_bbox(template_spec.title_block_bbox_mm, template_spec.paper_size_mm)
+        title_bbox = _centered_bbox(
+            template_spec.title_block_bbox_mm, template_spec.paper_size_mm
+        )
         if title_bbox:
             title_bbox = _offset_bbox(title_bbox, x_offset, y_offset)
             _add_bbox_rect(msp, title_bbox, layer="title")
@@ -113,12 +132,16 @@ def _draw_title_block(
 ) -> None:
     if not title_spec.grid:
         return
-    x_edges, y_edges = _grid_edges(title_bbox, title_spec.grid.rows_mm, title_spec.grid.cols_mm)
+    x_edges, y_edges = _grid_edges(
+        title_bbox, title_spec.grid.rows_mm, title_spec.grid.cols_mm
+    )
     segments = _grid_segments(x_edges, y_edges)
     for cell in title_spec.cells:
         _apply_cell_merge(segments, cell, x_edges, y_edges)
     _draw_segments(msp, segments, layer=layer)
-    _draw_cell_texts(msp, title_spec, x_edges, y_edges, title_values=title_values, layer=layer)
+    _draw_cell_texts(
+        msp, title_spec, x_edges, y_edges, title_values=title_values, layer=layer
+    )
 
 
 def _grid_edges(
@@ -136,7 +159,9 @@ def _grid_edges(
     return x_edges, y_edges
 
 
-def _grid_segments(x_edges: list[float], y_edges: list[float]) -> set[tuple[tuple[float, float], tuple[float, float]]]:
+def _grid_segments(
+    x_edges: list[float], y_edges: list[float]
+) -> set[tuple[tuple[float, float], tuple[float, float]]]:
     segments: set[tuple[tuple[float, float], tuple[float, float]]] = set()
     for y in y_edges[1:-1]:
         for i in range(len(x_edges) - 1):
@@ -191,7 +216,9 @@ def _draw_cell_texts(
         bounds = _cell_bounds(cell, x_edges, y_edges)
         anchor = _cell_anchor(bounds, cell.align, cell.valign)
         anchor = (anchor[0] + cell.offset_mm[0], anchor[1] + cell.offset_mm[1])
-        height = cell.text_height_mm if cell.text_height_mm else _TITLE_TEXT_HEIGHT_DEFAULT
+        height = (
+            cell.text_height_mm if cell.text_height_mm else _TITLE_TEXT_HEIGHT_DEFAULT
+        )
         alignment = _text_alignment(cell.align, cell.valign)
         entity = msp.add_text(
             text,
@@ -200,7 +227,9 @@ def _draw_cell_texts(
         entity.set_placement(anchor, align=alignment)
 
 
-def _resolve_cell_text(cell: TitleBlockCellSpec, title_values: dict[str, str] | None) -> str:
+def _resolve_cell_text(
+    cell: TitleBlockCellSpec, title_values: dict[str, str] | None
+) -> str:
     if cell.text is not None:
         value = cell.text
     elif cell.key:
@@ -271,7 +300,9 @@ def _normalize_segment(
     return (rp1, rp2) if rp1 <= rp2 else (rp2, rp1)
 
 
-def _centered_bbox(bbox: BoundingBox2D, paper_size_mm: tuple[float, float] | None) -> BoundingBox2D:
+def _centered_bbox(
+    bbox: BoundingBox2D, paper_size_mm: tuple[float, float] | None
+) -> BoundingBox2D:
     min_x, min_y, max_x, max_y = bbox
     if not paper_size_mm:
         return bbox
@@ -284,8 +315,15 @@ def _centered_bbox(bbox: BoundingBox2D, paper_size_mm: tuple[float, float] | Non
     )
 
 
-def _offset_bbox(bbox: BoundingBox2D, x_offset: float, y_offset: float) -> BoundingBox2D:
-    return (bbox[0] + x_offset, bbox[1] + y_offset, bbox[2] + x_offset, bbox[3] + y_offset)
+def _offset_bbox(
+    bbox: BoundingBox2D, x_offset: float, y_offset: float
+) -> BoundingBox2D:
+    return (
+        bbox[0] + x_offset,
+        bbox[1] + y_offset,
+        bbox[2] + x_offset,
+        bbox[3] + y_offset,
+    )
 
 
 def _add_bbox_rect(msp, bbox: BoundingBox2D, layer: str) -> None:
