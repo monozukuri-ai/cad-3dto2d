@@ -16,5 +16,8 @@ python scripts/gen2d.py --step_file </path/to/step_file> --template A4_Landscape
 
 ## Demo
 
+### Original 3D model
 ![3d](assets/simple_flange_3d.png)
+
+### Generated 2D drawing
 ![2d](assets/simple_flange_2d.png)
