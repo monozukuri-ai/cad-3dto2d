@@ -20,7 +20,6 @@ from .types import BoundingBox2D, Point2D
 class TemplateBaseSpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    name: str
     kind: Literal["svg", "parametric"]
     paper_size_mm: Point2D | None = None
     frame_bbox_mm: BoundingBox2D | None = None
@@ -93,7 +92,6 @@ class TitleBlockGridSpec(BaseModel):
 class TitleBlockCellSpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    id: str | None = None
     cell: tuple[int, int]
     span: tuple[int, int] = (1, 1)
     text: str | None = None
@@ -271,7 +269,6 @@ def load_template(
         raise ValueError(f"Invalid template entry for: {template_name}")
 
     payload = dict(raw)
-    payload["name"] = template_name
     payload.setdefault("default_scale", 1.0)
     if not payload.get("kind"):
         payload["kind"] = "svg"

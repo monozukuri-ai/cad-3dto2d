@@ -1,19 +1,8 @@
 from __future__ import annotations
 
-from typing import Iterable
-
-from build123d import Compound
 from pydantic import BaseModel, ConfigDict
 
 from .types import Point3D, Shape
-
-
-def bounding_size(shapes: Iterable[Shape]) -> Point3D:
-    shapes = list(shapes)
-    if not shapes:
-        return (0.0, 0.0, 0.0)
-    size = Compound(children=shapes).bounding_box().size
-    return (size.X, size.Y, size.Z)
 
 
 class _ShapeModel(BaseModel):
@@ -23,9 +12,6 @@ class _ShapeModel(BaseModel):
 class ViewProjection(_ShapeModel):
     visible: list[Shape]
     hidden: list[Shape]
-
-    def bounding_size(self) -> Point3D:
-        return bounding_size(self.visible + self.hidden)
 
 
 class ThreeViewProjections(_ShapeModel):

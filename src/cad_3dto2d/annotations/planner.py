@@ -45,7 +45,6 @@ class PlanningRules(BaseModel):
     max_pitch_dims: int = 2
     max_internal_dims: int = 4
     max_diameter_dims: int = 2
-    keep_min_position_dims: int = 1
     collapse_diameter_with_pitch: bool = True
     max_diameter_groups: int = 1
 
