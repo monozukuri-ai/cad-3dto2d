@@ -1,0 +1,9 @@
+styles:
+  iso:
+    description: Baseline ISO style (default).
+  iso_compact:
+    description: Smaller text/arrows for dense drawings.
+  iso_roomy:
+    description: Larger text and gaps for readability.
+  iso_precision:
+    description: Higher precision with more decimal places.

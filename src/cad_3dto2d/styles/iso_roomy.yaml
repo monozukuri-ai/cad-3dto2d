@@ -1,0 +1,19 @@
+units: mm
+line_types:
+  visible: CONTINUOUS
+  hidden: DASHED
+  template: CONTINUOUS
+  dims: CONTINUOUS
+dimension:
+  diameter_symbol: D
+  pitch_prefix: P
+  arrow_size: 3.2
+  arrow_block: CLOSED
+  arrow_block1: CLOSED
+  arrow_block2: CLOSED
+  extension_gap: 1.2
+  extension_offset: 1.2
+  extension_extension: 2.5
+  text_height: 4.5
+  text_gap: 1.5
+  decimal_places: 1
