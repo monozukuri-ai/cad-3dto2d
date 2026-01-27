@@ -310,6 +310,7 @@ def _resolve_basic_dimension_specs(
     config: ViewDimensionConfig,
     frame_bounds: BoundingBox2D | None,
     avoid_bounds: list[BoundingBox2D] | None,
+    measure_ratio: float = 1.0,
 ) -> list[LinearDimensionSpec]:
     bounds = Compound(children=shapes).bounding_box()
     padding = settings.text_gap + settings.text_height * 0.5
@@ -322,12 +323,12 @@ def _resolve_basic_dimension_specs(
         primary_offset = _basic_offset_for_side(
             bounds, orientation, side, settings, frame_bounds
         )
-        label = format_length(
+        length = (
             abs(primary_plan.p2[0] - primary_plan.p1[0])
             if orientation == "horizontal"
-            else abs(primary_plan.p2[1] - primary_plan.p1[1]),
-            settings.decimal_places,
+            else abs(primary_plan.p2[1] - primary_plan.p1[1])
         )
+        label = format_length(length * measure_ratio, settings.decimal_places)
         candidate_sides = _candidate_sides(side, bool(frame_bounds or avoid_bounds))
         selected_side = side
         selected_offset = primary_offset
@@ -422,6 +423,7 @@ def _plan_feature_dimensions(
     config: ViewDimensionConfig,
     settings: DimensionSettings,
     rules: PlanningRules,
+    measure_ratio: float = 1.0,
 ) -> tuple[
     list[PlannedDimension], list[PlannedDiameterDimension], list[LeaderNoteSpec]
 ]:
@@ -440,7 +442,10 @@ def _plan_feature_dimensions(
     # Convert pitch dimensions to labeled line dimensions
     pitch_line_dims: list[PlannedDimension] = []
     for plan in hole_pitches:
-        label = f"{plan.count}x{settings.pitch_prefix}{format_length(plan.pitch, settings.decimal_places)}"
+        label = (
+            f"{plan.count}x{settings.pitch_prefix}"
+            f"{format_length(plan.pitch * measure_ratio, settings.decimal_places)}"
+        )
         pitch_line_dims.append(
             PlannedDimension(
                 p1=plan.p1,
@@ -464,8 +469,8 @@ def _plan_feature_dimensions(
         )
 
     if bolt is not None and bolt.equal_spaced:
-        hole_d = bolt.hole_radius * 2
-        pcd_d = bolt.pcd_radius * 2
+        hole_d = bolt.hole_radius * 2 * measure_ratio
+        pcd_d = bolt.pcd_radius * 2 * measure_ratio
 
         # 表記は好みがあるので、まずはシンプルに（styleで上書きできるようにしても良い）
         text = (
@@ -522,7 +527,7 @@ def _plan_feature_dimensions(
             angle = angle_candidates[idx % len(angle_candidates)]
             label = (
                 f"{len(group)}x{settings.diameter_symbol}"
-                f"{format_length(circle.radius * 2, settings.decimal_places)}"
+                f"{format_length(circle.radius * 2 * measure_ratio, settings.decimal_places)}"
             )
             collapsed.append(
                 PlannedDiameterDimension(
@@ -641,6 +646,7 @@ def _resolve_line_dimension_specs(
     settings: DimensionSettings,
     frame_bounds: BoundingBox2D | None,
     avoid_bounds: list[BoundingBox2D] | None = None,
+    measure_ratio: float = 1.0,
 ) -> list[LinearDimensionSpec]:
     """Resolve planned dimensions into DXF-ready specs with frame-aware placement."""
     specs: list[LinearDimensionSpec] = []
@@ -652,9 +658,15 @@ def _resolve_line_dimension_specs(
         if plan.label:
             label = plan.label
         elif plan.orientation == "horizontal":
-            label = format_length(abs(plan.p2[0] - plan.p1[0]), settings.decimal_places)
+            label = format_length(
+                abs(plan.p2[0] - plan.p1[0]) * measure_ratio,
+                settings.decimal_places,
+            )
         else:
-            label = format_length(abs(plan.p2[1] - plan.p1[1]), settings.decimal_places)
+            label = format_length(
+                abs(plan.p2[1] - plan.p1[1]) * measure_ratio,
+                settings.decimal_places,
+            )
 
         text_width = _estimate_text_width(label, settings.text_height)
         padding = settings.text_gap + settings.text_height * 0.5
@@ -729,6 +741,7 @@ def _resolve_diameter_dimension_specs(
     settings: DimensionSettings,
     frame_bounds: BoundingBox2D | None,
     avoid_bounds: list[BoundingBox2D] | None = None,
+    measure_ratio: float = 1.0,
 ) -> list[DiameterDimensionSpec]:
     """Resolve diameter dimensions into DXF-ready specs with angle adjustment."""
     specs: list[DiameterDimensionSpec] = []
@@ -737,7 +750,7 @@ def _resolve_diameter_dimension_specs(
     for plan in diameter_dims:
         label = plan.label
         if label is None:
-            label = f"{settings.diameter_symbol}{format_length(plan.radius * 2, settings.decimal_places)}"
+            label = f"{settings.diameter_symbol}{format_length(plan.radius * 2 * measure_ratio, settings.decimal_places)}"
 
         angle_candidates = [plan.leader_angle_deg, plan.leader_angle_deg + 180.0]
         for step in (30, 60, 90, 120, 150):
@@ -776,6 +789,7 @@ def _generate_view_dimensions(
     frame_bounds: BoundingBox2D | None,
     avoid_bounds: list[BoundingBox2D] | None = None,
     include_basic: bool = True,
+    measure_scale: float | None = None,
 ) -> DimensionPlanOutput:
     """Plan all dimensions for a single view."""
     shapes = view.visible + view.hidden
@@ -786,25 +800,41 @@ def _generate_view_dimensions(
         shapes, dimension_settings, dimension_overrides
     )
     rules = PlanningRules()
+    measure_ratio = 1.0
+    if measure_scale and measure_scale != 1.0:
+        measure_ratio = 1.0 / measure_scale
 
     # Generate basic bounding box dimension specs
     basic_specs = _resolve_basic_dimension_specs(
-        shapes, settings, config, frame_bounds, avoid_bounds
+        shapes,
+        settings,
+        config,
+        frame_bounds,
+        avoid_bounds,
+        measure_ratio=measure_ratio,
     )
 
     # Extract and plan feature dimensions
     primitives = extract_primitives(shapes)
     features = extract_feature_coordinates(primitives)
     line_dims, diameter_dims, note_plans = _plan_feature_dimensions(
-        features, config, settings, rules
+        features, config, settings, rules, measure_ratio=measure_ratio
     )
 
     # Resolve planned dimensions into DXF-ready specs
     line_specs = _resolve_line_dimension_specs(
-        line_dims, settings, frame_bounds, avoid_bounds=avoid_bounds
+        line_dims,
+        settings,
+        frame_bounds,
+        avoid_bounds=avoid_bounds,
+        measure_ratio=measure_ratio,
     )
     diameter_specs = _resolve_diameter_dimension_specs(
-        diameter_dims, settings, frame_bounds, avoid_bounds=avoid_bounds
+        diameter_dims,
+        settings,
+        frame_bounds,
+        avoid_bounds=avoid_bounds,
+        measure_ratio=measure_ratio,
     )
 
     note_specs = _resolve_leader_note_specs(
@@ -938,6 +968,7 @@ def _build_layers(
                 frame_bounds,
                 avoid_bounds=view_avoid,
                 include_basic=(index == 0),
+                measure_scale=resolved_scale,
             )
             linear_dims.extend(output.linear)
             diameter_dims.extend(output.diameter)
