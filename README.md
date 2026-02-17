@@ -24,6 +24,26 @@ uv sync
 python scripts/gen2d.py --step_file </path/to/step_file> --template A4_LandscapeParam --add_dimensions
 ```
 
+Batch generation for machine-learning datasets (random template/style/scale/layout):
+
+```bash
+python scripts/gen2d_batch_random.py \
+  --input_dir path/to/3d_models_dir/ \
+  --output_dir path/to/output_dir/ \
+  --recursive \
+  --variants-per-step 3 \
+  --random-side-position \
+  --random-top-position \
+  --workers 4 \
+  --layout-scale-min 30 \
+  --layout-scale-max 70 \
+  --layout-offset-x-min -20 \
+  --layout-offset-x-max 20 \
+  --layout-offset-y-min -20 \
+  --layout-offset-y-max 20 \
+  --seed 42
+```
+
 ## Demo
 
 ### Original 3D model (Flange)

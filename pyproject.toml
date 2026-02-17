@@ -15,6 +15,7 @@ dependencies = [
     "pyyaml>=6.0",
     "rlpycairo>=0.3.0",
     "svglib>=1.5.1",
+    "tqdm>=4.67.3",
     "vtk>=9.5.2",
 ]
 
