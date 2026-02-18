@@ -93,6 +93,25 @@ def _dimension_overrides(settings: DimensionSettings) -> dict[str, float | int |
     return override
 
 
+def _ensure_dimension_text_style(
+    doc: "ezdxf.document.Drawing", settings: DimensionSettings
+) -> str | None:
+    style_name = settings.text_style
+    font_name = settings.text_font
+    if font_name and not style_name:
+        style_name = "DIM_TEXT"
+    if not style_name:
+        return None
+    if not doc.styles.has_entry(style_name):
+        doc.styles.new(
+            style_name,
+            dxfattribs={"font": font_name or "txt"},
+        )
+    elif font_name:
+        doc.styles.get(style_name).dxf.font = font_name
+    return style_name
+
+
 def _apply_parametric_template(
     doc: "ezdxf.document.Drawing",
     template_spec: ParametricTemplateSpec,
@@ -364,6 +383,9 @@ def add_ezdxf_dimensions(
 
     for dim in linear_dims:
         override = _dimension_overrides(dim.settings)
+        text_style = _ensure_dimension_text_style(doc, dim.settings)
+        if text_style:
+            override["dimtxsty"] = text_style
         entity = msp.add_linear_dim(
             base=dim.base,
             p1=dim.p1,
@@ -378,6 +400,9 @@ def add_ezdxf_dimensions(
 
     for dim in diameter_dims:
         override = _dimension_overrides(dim.settings)
+        text_style = _ensure_dimension_text_style(doc, dim.settings)
+        if text_style:
+            override["dimtxsty"] = text_style
         entity = msp.add_diameter_dim(
             center=dim.center,
             radius=dim.radius,
@@ -456,9 +481,13 @@ def add_ezdxf_leader_notes(
             if dx >= 0
             else TextEntityAlignment.MIDDLE_RIGHT
         )
+        text_style = _ensure_dimension_text_style(doc, s)
 
+        text_attribs = {"height": s.text_height, "layer": layer_name}
+        if text_style:
+            text_attribs["style"] = text_style
         t = msp.add_text(
             note.text,
-            dxfattribs={"height": s.text_height, "layer": layer_name},
+            dxfattribs=text_attribs,
         )
         t.set_placement(text_pos, align=align)

@@ -10,6 +10,8 @@ dimension:
   arrow_block: CLOSED
   arrow_block1: CLOSED
   arrow_block2: CLOSED
+  text_style: ISO_DIM
+  text_font: txt
   extension_gap: 1.0
   extension_offset: 1.0
   extension_extension: 2.0

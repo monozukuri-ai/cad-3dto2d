@@ -11,6 +11,8 @@ dimension:
   arrow_block: ARCHTICK
   arrow_block1: ARCHTICK
   arrow_block2: ARCHTICK
+  text_style: ISO_DIM
+  text_font: txt
   extension_gap: 0.7
   extension_offset: 0.7
   extension_extension: 1.4

@@ -10,6 +10,8 @@ dimension:
   arrow_block: EZ_ARROW_FILLED
   arrow_block1: EZ_ARROW_FILLED
   arrow_block2: EZ_ARROW_FILLED
+  text_style: ISO_DIM
+  text_font: txt
   extension_gap: 1.0
   extension_offset: 1.0
   extension_extension: 2.0

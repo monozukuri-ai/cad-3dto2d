@@ -10,6 +10,8 @@ dimension:
   arrow_block: DATUMBLANK
   arrow_block1: DATUMBLANK
   arrow_block2: DATUMBLANK
+  text_style: ISO_DIM
+  text_font: txt
   extension_gap: 1.0
   extension_offset: 1.0
   extension_extension: 2.0

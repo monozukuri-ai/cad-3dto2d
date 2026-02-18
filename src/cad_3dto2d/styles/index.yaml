@@ -25,3 +25,11 @@ styles:
     description: EZ_ARROW blank arrowheads.
   iso_arrow_ez_arrow_filled:
     description: EZ_ARROW filled arrowheads.
+  iso_font_arial:
+    description: ISO baseline geometry with Arial-based dimension text style.
+  iso_font_romans:
+    description: ISO baseline geometry with ROMANS SHX dimension text style.
+  iso_font_isocp:
+    description: ISO baseline geometry with ISOCP SHX dimension text style.
+  iso_font_simplex:
+    description: ISO baseline geometry with SIMPLEX SHX dimension text style.

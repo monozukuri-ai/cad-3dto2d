@@ -18,6 +18,8 @@ class DimensionSettings(BaseModel):
     arrow_block: str | None = None
     arrow_block1: str | None = None
     arrow_block2: str | None = None
+    text_style: str | None = None
+    text_font: str | None = None
     text_height: float = 3.5
     text_gap: float = 1.0
     decimal_places: int = 1

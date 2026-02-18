@@ -10,6 +10,8 @@ dimension:
   arrow_block: OPEN90
   arrow_block1: OPEN90
   arrow_block2: OPEN90
+  text_style: ISO_DIM
+  text_font: txt
   extension_gap: 1.0
   extension_offset: 1.0
   extension_extension: 2.0
