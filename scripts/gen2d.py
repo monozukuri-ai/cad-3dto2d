@@ -84,6 +84,15 @@ def main():
         help="Scale factor for the three-view layout (views only; gaps unchanged).",
     )
     parser.add_argument(
+        "--use-template-layout",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Use template frame/layout settings for view placement "
+            "(default: follows --add_template)."
+        ),
+    )
+    parser.add_argument(
         "--list-styles",
         action="store_true",
         help="List available styles and exit.",
@@ -121,6 +130,7 @@ def main():
         layout_offset_y=args.layout_offset_y,
         layout_scale=args.layout_scale,
         add_dimensions=args.add_dimensions,
+        use_template_layout=args.use_template_layout,
     )
 
 

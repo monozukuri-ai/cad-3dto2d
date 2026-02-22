@@ -1,11 +1,12 @@
 import math
 import os
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Literal, NamedTuple
 
 import ezdxf
-from build123d import Compound, ShapeList, import_step, import_svg
+from build123d import Compound, LineType, import_step, import_svg
 from pydantic import BaseModel, ConfigDict
 
 from .annotations.dimensions import (
@@ -88,8 +89,22 @@ class DimensionPlanOutput(NamedTuple):
     leader_notes: list[LeaderNoteSpec]
 
 
-def _load_svg_template(template_spec: SvgTemplateSpec) -> ShapeList[Shape]:
-    return import_svg(template_spec.file_path)
+@lru_cache(maxsize=32)
+def _load_svg_template_shapes(file_path: str) -> tuple[Shape, ...]:
+    return tuple(import_svg(file_path))
+
+
+@lru_cache(maxsize=256)
+def _translated_svg_template_shapes(
+    file_path: str,
+    x_offset: float,
+    y_offset: float,
+) -> tuple[Shape, ...]:
+    template = _load_svg_template_shapes(file_path)
+    tmp_size = Compound(children=template).bounding_box().size
+    dx = -tmp_size.X / 2 + x_offset
+    dy = -tmp_size.Y / 2 + y_offset
+    return tuple(shape.translate((dx, dy, 0)) for shape in template)
 
 
 def _centered_bbox(
@@ -883,6 +898,7 @@ def _build_layers(
     model,
     add_template: bool,
     template_spec: TemplateSpec | None,
+    use_template_layout: bool,
     x_offset: float,
     y_offset: float,
     side_position: Literal["left", "right"] | None,
@@ -898,17 +914,22 @@ def _build_layers(
     linear_dims: list[LinearDimensionSpec] = []
     diameter_dims: list[DiameterDimensionSpec] = []
     notes: list[LeaderNoteSpec] = []
+    layout_template_spec = template_spec if use_template_layout else None
 
     # Project and layout the three views
-    template_offset_x = template_spec.layout_offset_mm[0] if template_spec else 0.0
-    template_offset_y = template_spec.layout_offset_mm[1] if template_spec else 0.0
+    template_offset_x = (
+        layout_template_spec.layout_offset_mm[0] if layout_template_spec else 0.0
+    )
+    template_offset_y = (
+        layout_template_spec.layout_offset_mm[1] if layout_template_spec else 0.0
+    )
     combined_offset_x = template_offset_x + layout_offset_x
     combined_offset_y = template_offset_y + layout_offset_y
     resolved_scale = layout_scale
-    if resolved_scale is None and template_spec:
-        resolved_scale = template_spec.default_scale
+    if resolved_scale is None and layout_template_spec:
+        resolved_scale = layout_template_spec.default_scale
     resolved_side_position, resolved_top_position = _resolve_layout_positions(
-        template_spec,
+        layout_template_spec,
         side_position,
         top_position,
     )
@@ -921,8 +942,8 @@ def _build_layers(
         top_position=resolved_top_position,
         layout_offset_x=combined_offset_x,
         layout_offset_y=combined_offset_y,
-        frame_bbox_mm=template_spec.frame_bbox_mm if template_spec else None,
-        paper_size_mm=template_spec.paper_size_mm if template_spec else None,
+        frame_bbox_mm=layout_template_spec.frame_bbox_mm if layout_template_spec else None,
+        paper_size_mm=layout_template_spec.paper_size_mm if layout_template_spec else None,
         scale=resolved_scale,
     )
     layers["visible"] = layout.combined.visible
@@ -931,15 +952,21 @@ def _build_layers(
     # Generate dimensions for each view
     if add_dimensions:
         frame_bounds = _centered_bbox(
-            template_spec, template_spec.frame_bbox_mm if template_spec else None
+            layout_template_spec,
+            layout_template_spec.frame_bbox_mm if layout_template_spec else None,
         )
         title_block_bounds = _centered_bbox(
-            template_spec, template_spec.title_block_bbox_mm if template_spec else None
+            layout_template_spec,
+            (
+                layout_template_spec.title_block_bbox_mm
+                if layout_template_spec
+                else None
+            ),
         )
         avoid_bounds: list[BoundingBox2D] = []
-        if template_spec and template_spec.reserved_bbox_mm:
-            for bbox in template_spec.reserved_bbox_mm:
-                centered = _centered_bbox(template_spec, bbox)
+        if layout_template_spec and layout_template_spec.reserved_bbox_mm:
+            for bbox in layout_template_spec.reserved_bbox_mm:
+                centered = _centered_bbox(layout_template_spec, bbox)
                 if centered:
                     avoid_bounds.append(centered)
         if title_block_bounds:
@@ -976,12 +1003,13 @@ def _build_layers(
 
     # Add template layer
     if add_template and isinstance(template_spec, SvgTemplateSpec):
-        template = _load_svg_template(template_spec)
-        tmp_size = Compound(children=template).bounding_box().size
-        layers["template"] = [
-            shape.translate((-tmp_size.X / 2 + x_offset, -tmp_size.Y / 2 + y_offset, 0))
-            for shape in template
-        ]
+        layers["template"] = list(
+            _translated_svg_template_shapes(
+                template_spec.file_path,
+                x_offset,
+                y_offset,
+            )
+        )
 
     return layers, DimensionPlanOutput(linear_dims, diameter_dims, notes)
 
@@ -1010,7 +1038,7 @@ def _export_outputs(
     dimension_plans: DimensionPlanOutput,
     output_files: list[str],
     line_weight: float,
-    line_types: dict[str, "LineType"] | None,
+    line_types: dict[str, LineType] | None,
     template_spec: TemplateSpec | None,
     add_template: bool,
     x_offset: float,
@@ -1096,17 +1124,23 @@ def convert_2d_drawing(
     layout_scale: float | None = None,
     style_name: str | None = "iso",
     add_dimensions: bool = False,
+    use_template_layout: bool | None = None,
     dimension_settings: DimensionSettings | None = None,
 ) -> None:
+    if use_template_layout is None:
+        use_template_layout = add_template
     model = import_step(step_file)
     style = load_style(style_name) if style_name else None
     line_types = style.resolve_line_types() if style else None
     dimension_overrides = style.dimension if style and style.dimension else None
-    template_spec = load_template(template_name)
+    template_spec = (
+        load_template(template_name) if (add_template or use_template_layout) else None
+    )
     layers, dimension_plans = _build_layers(
         model,
         add_template,
         template_spec,
+        use_template_layout,
         x_offset,
         y_offset,
         side_position,

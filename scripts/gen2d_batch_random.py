@@ -36,6 +36,7 @@ def _run_job(job: dict[str, Any]) -> dict[str, Any]:
             side_position=side_position,
             top_position=top_position,
             add_dimensions=bool(job["add_dimensions"]),
+            use_template_layout=job["use_template_layout"],
         )
     except Exception as exc:
         return {
@@ -185,6 +186,7 @@ def _build_jobs(
     random_side_position: bool,
     random_top_position: bool,
     add_dimensions: bool,
+    use_template_layout: bool | None,
 ) -> list[dict[str, Any]]:
     jobs: list[dict[str, Any]] = []
     job_id = 0
@@ -225,6 +227,7 @@ def _build_jobs(
                     "side_position": side_position,
                     "top_position": top_position,
                     "add_dimensions": add_dimensions,
+                    "use_template_layout": use_template_layout,
                 }
             )
     return jobs
@@ -314,6 +317,15 @@ def main() -> int:
         help="Enable dimensions (default: enabled).",
     )
     parser.add_argument(
+        "--use-template-layout",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Use template frame/layout settings for view placement "
+            "(default: follows --add_template)."
+        ),
+    )
+    parser.add_argument(
         "--continue-on-error",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -376,6 +388,7 @@ def main() -> int:
         random_side_position=args.random_side_position,
         random_top_position=args.random_top_position,
         add_dimensions=args.add_dimensions,
+        use_template_layout=args.use_template_layout,
     )
     total_jobs = len(jobs)
     success = 0
@@ -453,6 +466,11 @@ def main() -> int:
                             "top_position": str(job["top_position"]),
                             "seed": args.seed,
                             "add_dimensions": int(args.add_dimensions),
+                            "use_template_layout": (
+                                "auto"
+                                if job["use_template_layout"] is None
+                                else str(bool(job["use_template_layout"])).lower()
+                            ),
                             "status": status,
                             "error": error,
                         }
@@ -486,6 +504,7 @@ def main() -> int:
         "top_position",
         "seed",
         "add_dimensions",
+        "use_template_layout",
         "status",
         "error",
     ]

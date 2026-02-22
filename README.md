@@ -44,6 +44,8 @@ python scripts/gen2d_batch_random.py \
   --seed 42
 ```
 
+If you do not need template-based layout alignment, add `--no-use-template-layout` for faster generation.
+
 ## Demo
 
 ### Original 3D model (Flange)
