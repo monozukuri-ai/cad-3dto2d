@@ -19,7 +19,9 @@ from .annotations.dimensions import (
     format_length,
 )
 from .annotations.features import (
+    CirclePrimitive,
     FeatureCoordinates,
+    PrimitiveResult,
     extract_feature_coordinates,
     extract_primitives,
 )
@@ -266,7 +268,27 @@ def _basic_plan_for_side(
     bounds,
     orientation: Literal["horizontal", "vertical"],
     side: DimensionSide,
+    circle_tangent: CirclePrimitive | None = None,
 ) -> PlannedDimension:
+    if circle_tangent is not None:
+        cx, cy = circle_tangent.center
+        radius = circle_tangent.radius
+        if orientation == "horizontal":
+            return PlannedDimension(
+                p1=(cx - radius, cy),
+                p2=(cx + radius, cy),
+                orientation="horizontal",
+                side=side,
+                base_ref=bounds.max.Y if side == "top" else bounds.min.Y,
+            )
+        return PlannedDimension(
+            p1=(cx, cy - radius),
+            p2=(cx, cy + radius),
+            orientation="vertical",
+            side=side,
+            base_ref=bounds.max.X if side == "right" else bounds.min.X,
+        )
+
     xmin, ymin = bounds.min.X, bounds.min.Y
     xmax, ymax = bounds.max.X, bounds.max.Y
     if orientation == "horizontal":
@@ -319,22 +341,53 @@ def _basic_offset_for_side(
     )
 
 
+def _outer_circle_for_basic_dims(
+    primitives: PrimitiveResult | None,
+    tol: float = 1e-3,
+) -> CirclePrimitive | None:
+    if not primitives or not primitives.circles:
+        return None
+    xmin, ymin, xmax, ymax = primitives.bounds
+    matches: list[CirclePrimitive] = []
+    for circle in primitives.circles:
+        left = circle.center[0] - circle.radius
+        right = circle.center[0] + circle.radius
+        bottom = circle.center[1] - circle.radius
+        top = circle.center[1] + circle.radius
+        if (
+            abs(left - xmin) <= tol
+            and abs(right - xmax) <= tol
+            and abs(bottom - ymin) <= tol
+            and abs(top - ymax) <= tol
+        ):
+            matches.append(circle)
+    if not matches:
+        return None
+    return max(matches, key=lambda circle: circle.radius)
+
+
 def _resolve_basic_dimension_specs(
     shapes: list[Shape],
     settings: DimensionSettings,
     config: ViewDimensionConfig,
     frame_bounds: BoundingBox2D | None,
     avoid_bounds: list[BoundingBox2D] | None,
+    primitives: PrimitiveResult | None = None,
     measure_ratio: float = 1.0,
 ) -> list[LinearDimensionSpec]:
     bounds = Compound(children=shapes).bounding_box()
     padding = settings.text_gap + settings.text_height * 0.5
+    circle_tangent = None
+    if settings.basic_circle_tangent_dims:
+        circle_tangent = _outer_circle_for_basic_dims(primitives)
     specs: list[LinearDimensionSpec] = []
     for orientation, side in (
         ("horizontal", config.horizontal_side),
         ("vertical", config.vertical_side),
     ):
-        primary_plan = _basic_plan_for_side(bounds, orientation, side)
+        primary_plan = _basic_plan_for_side(
+            bounds, orientation, side, circle_tangent=circle_tangent
+        )
         primary_offset = _basic_offset_for_side(
             bounds, orientation, side, settings, frame_bounds
         )
@@ -349,7 +402,12 @@ def _resolve_basic_dimension_specs(
         selected_offset = primary_offset
         if len(candidate_sides) > 1:
             for candidate in candidate_sides:
-                candidate_plan = _basic_plan_for_side(bounds, orientation, candidate)
+                candidate_plan = _basic_plan_for_side(
+                    bounds,
+                    orientation,
+                    candidate,
+                    circle_tangent=circle_tangent,
+                )
                 candidate_offset = _basic_offset_for_side(
                     bounds, orientation, candidate, settings, frame_bounds
                 )
@@ -819,6 +877,9 @@ def _generate_view_dimensions(
     if measure_scale and measure_scale != 1.0:
         measure_ratio = 1.0 / measure_scale
 
+    primitives = extract_primitives(shapes)
+    features = extract_feature_coordinates(primitives)
+
     # Generate basic bounding box dimension specs
     basic_specs = _resolve_basic_dimension_specs(
         shapes,
@@ -826,12 +887,11 @@ def _generate_view_dimensions(
         config,
         frame_bounds,
         avoid_bounds,
+        primitives=primitives,
         measure_ratio=measure_ratio,
     )
 
     # Extract and plan feature dimensions
-    primitives = extract_primitives(shapes)
-    features = extract_feature_coordinates(primitives)
     line_dims, diameter_dims, note_plans = _plan_feature_dimensions(
         features, config, settings, rules, measure_ratio=measure_ratio
     )

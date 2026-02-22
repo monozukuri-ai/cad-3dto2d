@@ -18,6 +18,7 @@ class DimensionSettings(BaseModel):
     arrow_block: str | None = None
     arrow_block1: str | None = None
     arrow_block2: str | None = None
+    basic_circle_tangent_dims: bool = False
     text_style: str | None = None
     text_font: str | None = None
     text_height: float = 3.5

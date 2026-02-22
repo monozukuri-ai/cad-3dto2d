@@ -33,3 +33,5 @@ styles:
     description: ISO baseline geometry with ISOCP SHX dimension text style.
   iso_font_simplex:
     description: ISO baseline geometry with SIMPLEX SHX dimension text style.
+  iso_full_extension:
+    description: No extension-gap dimension style; witness lines start at geometry.
