@@ -11,10 +11,11 @@ dimension:
   arrow_block: ARCHTICK
   arrow_block1: ARCHTICK
   arrow_block2: ARCHTICK
+  basic_circle_tangent_dims: true
   text_style: ISO_DIM
   text_font: txt
   extension_gap: 0.7
-  extension_offset: 0.7
+  extension_offset: 0.0
   extension_extension: 1.4
   text_height: 3.0
   text_gap: 0.8

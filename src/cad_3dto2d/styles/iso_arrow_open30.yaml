@@ -10,10 +10,11 @@ dimension:
   arrow_block: OPEN30
   arrow_block1: OPEN30
   arrow_block2: OPEN30
+  basic_circle_tangent_dims: true
   text_style: ISO_DIM
   text_font: txt
   extension_gap: 1.0
-  extension_offset: 1.0
+  extension_offset: 0.0
   extension_extension: 2.0
   text_height: 3.5
   text_gap: 1.0

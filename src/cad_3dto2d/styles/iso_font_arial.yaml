@@ -10,10 +10,11 @@ dimension:
   arrow_block: CLOSED
   arrow_block1: CLOSED
   arrow_block2: CLOSED
+  basic_circle_tangent_dims: true
   text_style: DIM_ARIAL
   text_font: arial.ttf
   extension_gap: 1.0
-  extension_offset: 1.0
+  extension_offset: 0.0
   extension_extension: 2.0
   text_height: 3.5
   text_gap: 1.0

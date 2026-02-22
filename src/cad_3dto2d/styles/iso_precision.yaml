@@ -11,6 +11,7 @@ dimension:
   arrow_block: OPEN
   arrow_block1: OPEN
   arrow_block2: OPEN
+  basic_circle_tangent_dims: false
   text_style: ISO_DIM
   text_font: txt
   extension_gap: 0.6
